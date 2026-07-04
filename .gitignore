@@ -52,3 +52,6 @@ logs/
 # Docker
 .docker/
 docker-compose.override.yml
+
+*.csv
+*.db

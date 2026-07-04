@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
     QWEN_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
     
     # LangChain / LangGraph tracing (Optional)
     LANGCHAIN_TRACING_V2: str = "false"

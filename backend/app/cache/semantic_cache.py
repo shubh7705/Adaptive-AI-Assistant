@@ -16,7 +16,7 @@ class SemanticCacheManager:
         api_key = settings.GOOGLE_API_KEY
         if api_key:
             self.embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001",
+                model="models/text-embedding-004",
                 google_api_key=api_key
             )
         else:
@@ -31,18 +31,22 @@ class SemanticCacheManager:
             return
 
         try:
-            # We attempt to connect to Redis. If it fails, we catch it so the app remains runnable.
-            # RedisSemanticCache requires Redis with the RediSearch module installed.
-            set_llm_cache(
-                RedisSemanticCache(
-                    redis_url=self.redis_url,
-                    embedding=self.embeddings,
-                    score_threshold=self.score_threshold
-                )
-            )
-            print("Semantic Cache initialized successfully.")
+            import redis
+            from langchain_core.caches import InMemoryCache
+            from langchain_community.cache import RedisCache
+
+            # Test Redis connection first
+            try:
+                r = redis.Redis.from_url(self.redis_url)
+                r.ping()
+                # Redis is up, use Exact-Match Cache to avoid embedding model errors
+                set_llm_cache(RedisCache(redis_=r))
+                print("Exact-Match Cache initialized successfully with Redis.")
+            except redis.ConnectionError:
+                print("Warning: Redis is unreachable. Falling back to InMemoryCache.")
+                set_llm_cache(InMemoryCache())
         except Exception as e:
-            print(f"Warning: Failed to initialize Semantic Cache. Ensure Redis with RediSearch is running. Error: {e}")
+            print(f"Warning: Failed to initialize Semantic Cache. Error: {e}")
 
     # For manual caching outside of LangChain globals:
     async def check_cache(self, query: str) -> str | None:

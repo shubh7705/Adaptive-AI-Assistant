@@ -4,6 +4,9 @@ import uuid
 from datetime import datetime, timezone
 from app.database.base import Base
 
+def utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
@@ -12,8 +15,8 @@ class Conversation(Base):
     title = Column(String, nullable=True)
     summary = Column(JSON, nullable=True)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utcnow_naive)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
 
@@ -27,6 +30,6 @@ class Message(Base):
     tool_calls = Column(JSON, nullable=True)
     token_count = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utcnow_naive)
 
     conversation = relationship("Conversation", back_populates="messages")

@@ -16,7 +16,7 @@ class RAGRetriever:
             raise ValueError("GOOGLE_API_KEY is required for embedding documents.")
             
         self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/text-embedding-004",
             google_api_key=api_key
         )
         self.vector_store = None

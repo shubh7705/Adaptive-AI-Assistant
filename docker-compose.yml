@@ -42,10 +42,9 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-modelrouter}
       - REDIS_URL=redis://redis:6379/0
       - POSTGRES_READY=true
-      # Add LLM API Keys here or pass via .env file
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy

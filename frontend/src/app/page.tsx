@@ -1,28 +1,86 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Activity, Zap, Server, DollarSign, BrainCircuit, LineChart } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-
-// Mock Data
-const metrics = [
-  { title: "Total Requests", value: "24,593", change: "+12.5%", icon: Activity, color: "text-blue-400" },
-  { title: "Cache Hit Rate", value: "42.8%", change: "+5.2%", icon: Zap, color: "text-yellow-400" },
-  { title: "Avg Latency", value: "342ms", change: "-18ms", icon: Server, color: "text-emerald-400" },
-  { title: "Total Cost", value: "$142.50", change: "-$12.30", icon: DollarSign, color: "text-red-400" },
-]
-
-const chartData = [
-  { time: '00:00', deepseek: 40, gemma: 24, gpt4: 10 },
-  { time: '04:00', deepseek: 30, gemma: 13, gpt4: 5 },
-  { time: '08:00', deepseek: 120, gemma: 58, gpt4: 45 },
-  { time: '12:00', deepseek: 250, gemma: 110, gpt4: 85 },
-  { time: '16:00', deepseek: 210, gemma: 90, gpt4: 70 },
-  { time: '20:00', deepseek: 150, gemma: 65, gpt4: 40 },
-  { time: '24:00', deepseek: 60, gemma: 30, gpt4: 15 },
-]
+import { Activity, Zap, Server, DollarSign, BrainCircuit, BarChart3, Loader2 } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 export default function Dashboard() {
+  const [metrics, setMetrics] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const [summaryRes, distRes] = await Promise.all([
+          fetch(`${apiUrl}/api/v1/analytics/summary`),
+          fetch(`${apiUrl}/api/v1/analytics/routing-distribution`)
+        ]);
+        
+        const summaryData = await summaryRes.json();
+        const distData = await distRes.json();
+        
+        // Map backend summary to frontend metric cards
+        setMetrics([
+          { 
+            title: "Total Requests", 
+            value: summaryData.total_requests.toLocaleString(), 
+            change: "", 
+            icon: Activity, 
+            color: "text-blue-400" 
+          },
+          { 
+            title: "Cache Hit Rate", 
+            value: `${summaryData.cache_hit_rate.toFixed(1)}%`, 
+            change: "", 
+            icon: Zap, 
+            color: "text-yellow-400" 
+          },
+          { 
+            title: "Avg Latency", 
+            value: `${summaryData.avg_latency_ms.toFixed(0)}ms`, 
+            change: "", 
+            icon: Server, 
+            color: "text-emerald-400" 
+          },
+          { 
+            title: "Total Tokens", 
+            value: summaryData.total_tokens.toLocaleString(), 
+            change: "", 
+            icon: BrainCircuit, 
+            color: "text-purple-400" 
+          },
+        ]);
+
+        // Map backend distribution to Recharts BarChart format
+        const formattedChartData = Object.entries(distData.distribution).map(([name, count]) => ({
+          name: name.split('/').pop() || name, // simplify long model names
+          count: count
+        }));
+        
+        setChartData(formattedChartData);
+      } catch (error) {
+        console.error("Failed to fetch analytics:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAnalytics();
+  }, []);
+
+  const COLORS = ['#8b5cf6', '#3b82f6', '#ec4899', '#10b981', '#f59e0b'];
+
+  if (loading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-10">
       <div className="flex items-center justify-between">
@@ -64,7 +122,6 @@ export default function Dashboard() {
             transition={{ delay: index * 0.1 }}
             className="glass-panel p-6 rounded-2xl relative overflow-hidden group"
           >
-            {/* Background Glow */}
             <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors duration-500" />
             
             <div className="flex items-center justify-between mb-4 relative z-10">
@@ -73,9 +130,11 @@ export default function Dashboard() {
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <h2 className="text-3xl font-bold text-white">{metric.value}</h2>
-              <span className={`text-xs font-medium ${metric.change.startsWith('+') && metric.title !== "Total Cost" ? 'text-emerald-400' : 'text-emerald-400'}`}>
-                {metric.change}
-              </span>
+              {metric.change && (
+                <span className="text-xs font-medium text-emerald-400">
+                  {metric.change}
+                </span>
+              )}
             </div>
           </motion.div>
         ))}
@@ -90,35 +149,28 @@ export default function Dashboard() {
       >
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-primary/20 border border-primary/30">
-            <LineChart className="h-5 w-5 text-primary" />
+            <BarChart3 className="h-5 w-5 text-primary" />
           </div>
-          <h3 className="text-lg font-semibold text-white">Routing Distribution Over Time</h3>
+          <h3 className="text-lg font-semibold text-white">Routing Distribution</h3>
         </div>
         
         <div className="flex-1 w-full min-h-0">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorDeepseek" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorGemma" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
-              <XAxis dataKey="time" stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
+              <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip 
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                 contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                 itemStyle={{ color: 'white' }}
               />
-              <Area type="monotone" dataKey="deepseek" name="DeepSeek V3" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorDeepseek)" />
-              <Area type="monotone" dataKey="gemma" name="Gemma 3 12B" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorGemma)" />
-              <Area type="monotone" dataKey="gpt4" name="GPT-4o" stroke="#ec4899" strokeWidth={2} fillOpacity={1} fill="transparent" />
-            </AreaChart>
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </motion.div>

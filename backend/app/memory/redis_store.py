@@ -3,13 +3,16 @@ import json
 from typing import List, Dict, Any
 from app.config.settings import settings
 
+# Global fallback memory
+_fallback_memory: Dict[str, List[Dict[str, Any]]] = {}
+_redis_warned = False
+
 class RedisMemoryStore:
     """
     Manages short-term conversation history for fast retrieval by LangGraph agents.
-    Uses Redis as the backing store.
+    Uses Redis as the backing store, falls back to in-memory dict if Redis is offline.
     """
     def __init__(self):
-        # We catch connection errors locally to ensure the app doesn't crash if Redis isn't running yet.
         self.redis_url = settings.REDIS_URL
         self._client = None
 
@@ -28,17 +31,22 @@ class RedisMemoryStore:
         
         try:
             await client.rpush(key, json.dumps(message))
-            # Keep only the last 50 messages
             await client.ltrim(key, -50, -1)
-            # Expire short-term memory after 24 hours of inactivity
             await client.expire(key, 86400)
-        except redis.ConnectionError:
-            # Fallback for local development if Redis isn't up
-            print(f"Warning: Redis connection failed. Message for {session_id} not cached.")
+        except Exception:
+            global _redis_warned
+            if not _redis_warned:
+                print("Warning: Redis connection failed. Falling back to in-memory chat history.")
+                _redis_warned = True
+            
+            if session_id not in _fallback_memory:
+                _fallback_memory[session_id] = []
+            _fallback_memory[session_id].append(message)
+            _fallback_memory[session_id] = _fallback_memory[session_id][-50:]
 
     async def get_history(self, session_id: str) -> List[Dict[str, Any]]:
         """
-        Retrieves the recent conversation history from Redis.
+        Retrieves the recent conversation history from Redis or fallback memory.
         """
         client = await self.get_client()
         key = f"chat_history:{session_id}"
@@ -46,5 +54,5 @@ class RedisMemoryStore:
         try:
             raw_messages = await client.lrange(key, 0, -1)
             return [json.loads(m) for m in raw_messages]
-        except redis.ConnectionError:
-            return []
+        except Exception:
+            return _fallback_memory.get(session_id, [])

@@ -1,3 +1,4 @@
+import json
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.schemas.intent import IntentClassification
@@ -16,17 +17,23 @@ class IntentAgent:
         # Using a fast, cheap model for routing logic
         self.llm = ChatGoogleGenerativeAI(model=model_name, api_key=api_key)
         
-        # Force strict JSON output matching our schema
-        self.structured_llm = self.llm.with_structured_output(IntentClassification)
-        
         self.system_prompt = SystemMessage(content="""You are the master routing intelligence of the ModelRouter AI system.
 Your goal is to analyze the user's query and classify it precisely.
 
-Determine the primary intent category.
-Estimate the complexity (low = simple factual, medium = some reasoning/generation, high = complex math, architecture, large code refactoring).
-Determine if the prompt strictly requires external tools (like search, calculator, db access).
+Determine the primary intent category (task). Must be one of:
+'coding', 'math', 'translation', 'creative', 'summarization', 'chat', 'rag', 'vision', 'ocr', 'tool_usage', 'programming', 'sql', 'data_analysis', 'reasoning', 'classification', 'extraction', 'question_answering', 'unknown'
 
-Output your results in the requested structured JSON format. Be objective and fast.
+Estimate the complexity. Must be one of: 'low', 'medium', 'high'.
+Determine if it strictly requires external tools (boolean).
+Assign a confidence score between 0.0 and 1.0.
+
+Return ONLY a raw JSON object with NO markdown formatting, strictly matching this schema:
+{
+  "task": "...",
+  "confidence": 0.95,
+  "complexity": "medium",
+  "requires_tools": false
+}
 """)
 
     async def execute(self, query: str) -> IntentClassification:
@@ -35,7 +42,13 @@ Output your results in the requested structured JSON format. Be objective and fa
             HumanMessage(content=query)
         ]
         
-        result = await self.structured_llm.ainvoke(messages)
+        result = await self.llm.ainvoke(messages)
         
-        # If confidence is too low, we might flag it for clarification in the orchestration layer
-        return result
+        try:
+            # Strip potential markdown formatting from the response
+            clean_json = result.content.strip().strip('```json').strip('```').strip()
+            parsed_data = json.loads(clean_json)
+            return IntentClassification(**parsed_data)
+        except Exception as e:
+            # Fallback if the LLM refuses to return valid JSON
+            raise ValueError(f"Failed to parse LLM intent response: {e}. Raw content: {result.content}")

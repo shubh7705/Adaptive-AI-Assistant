@@ -1,7 +1,10 @@
-from sqlalchemy import Column, String, Float, Boolean, DateTime
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer
 import uuid
 from datetime import datetime, timezone
 from app.database.base import Base
+
+def utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class ModelRegistry(Base):
     __tablename__ = "models"
@@ -16,7 +19,13 @@ class ModelRegistry(Base):
     supports_streaming = Column(Boolean, default=False)
     supports_vision = Column(Boolean, default=False)
     supports_tools = Column(Boolean, default=False)
+    supports_function_calling = Column(Boolean, default=False)
+    supports_json_mode = Column(Boolean, default=False)
+    
+    context_window = Column(Integer, default=8192)
+    max_output_tokens = Column(Integer, default=4096)
+    
     is_active = Column(Boolean, default=True)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utcnow_naive)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)

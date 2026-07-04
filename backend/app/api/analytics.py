@@ -13,8 +13,7 @@ router = APIRouter()
 
 @router.get("/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Returns high-level aggregate metrics for the dashboard.
@@ -52,8 +51,7 @@ async def get_dashboard_summary(
 
 @router.get("/routing-distribution", response_model=RoutingDistribution)
 async def get_routing_distribution(
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Returns the count of requests routed to each specific model.
@@ -74,3 +72,45 @@ async def get_routing_distribution(
         distribution = {"deepseek-chat-v3-0324": 0, "gemma-3-12b-it": 0}
         
     return RoutingDistribution(distribution=distribution)
+
+@router.get("/cost-by-provider")
+async def get_cost_by_provider(db: AsyncSession = Depends(get_db)):
+    """
+    Returns the total estimated cost grouped by AI provider.
+    """
+    stmt = (
+        select(ModelRegistry.provider, func.sum(RoutingLog.estimated_cost))
+        .select_from(RoutingLog)
+        .join(ModelRegistry, RoutingLog.model_id == ModelRegistry.id)
+        .group_by(ModelRegistry.provider)
+    )
+    result = await db.execute(stmt)
+    
+    data = [{"provider": row[0].capitalize() if row[0] else "Unknown", "cost": round(row[1], 4)} for row in result.all()]
+    if not data:
+        data = [{"provider": "Google", "cost": 0.0}]
+        
+    return data
+
+@router.get("/time-series")
+async def get_time_series(db: AsyncSession = Depends(get_db)):
+    """
+    Returns the latest 20 routing logs formatted for a time-series chart.
+    """
+    stmt = select(RoutingLog).order_by(RoutingLog.created_at.desc()).limit(20)
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+    logs.reverse() # Chronological order
+    
+    data = []
+    for log in logs:
+        data.append({
+            "time": log.created_at.strftime("%H:%M:%S") if log.created_at else "00:00:00",
+            "tokens": log.total_tokens,
+            "cost": round(log.estimated_cost, 4)
+        })
+        
+    if not data:
+        data = [{"time": "00:00:00", "tokens": 0, "cost": 0.0}]
+        
+    return data
