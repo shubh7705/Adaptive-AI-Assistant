@@ -9,9 +9,11 @@ ModelRouter AI is an intelligent, production-ready Multi-Model AI Router. Instea
 - **Intent Detection Agent**: Analyzes prompts to detect the task (math, coding, creative) and complexity.
 - **Cost Optimization Agent**: Uses local tokenization (`tiktoken`) to calculate budgets and prevent expensive models from being wasted on simple queries.
 - **Model Selection Agent**: Dynamically scores and selects the best model from the active registry based on `Score = Quality + Latency + Cost + Availability`.
+- **Live Analytics Dashboard**: Real-time Next.js visualizations (using Recharts) for token usage over time, cache-hit rates, and estimated cost distribution grouped by AI provider.
+- **Real-Time Intent Logging**: Automatically logs user queries and detected intent tasks directly to a CSV file (`chat_intents.csv`) for offline dataset generation and training.
+- **Exact-Match Redis Caching**: Intercepts identical user queries before they hit external provider APIs, serving them instantly from Redis to guarantee <50ms latency and zero API cost.
 - **Prompt Optimization Agent**: Automatically rewrites poor prompts for better generation.
 - **Tool Calling Framework**: Equips LLMs with calculators, web search, and Python executors.
-- **Semantic Caching**: Uses Redis Vector Search to instantly return cached answers for identical/similar questions without hitting the LLM API.
 - **RAG Pipeline**: Native FAISS integration to chat with your PDFs, Word documents, and Markdown files.
 - **Quality Evaluation Gate**: Grades AI responses for accuracy and hallucination before returning them to the user.
 - **Fallback Router**: Instantly retries with a secondary model if the primary model fails or hallucinates.
