@@ -31,6 +31,64 @@ ModelRouter AI is an intelligent, production-ready Multi-Model AI Router. Instea
 
 ---
 
+## 🗺️ System Workflow
+
+```mermaid
+graph TD
+    %% Styling
+    classDef frontend fill:#3b82f6,stroke:#1e40af,stroke-width:2px,color:#fff
+    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
+    classDef database fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+    classDef external fill:#8b5cf6,stroke:#5b21b6,stroke-width:2px,color:#fff
+    classDef cache fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff
+
+    %% Nodes
+    User(("User"))
+    UI["Next.js Frontend UI"]:::frontend
+    Dashboard["Next.js Analytics Dashboard"]:::frontend
+    
+    API["FastAPI /stream Endpoint"]:::backend
+    RedisCache[("Redis Exact-Match Cache")]:::cache
+    IntentAgent["Intent Agent (Gemini Flash)"]:::backend
+    ModelSelector["Model Selection Agent"]:::backend
+    StreamingService["Streaming Service"]:::backend
+    CSVLogger["CSV Intent Logger"]:::backend
+    
+    PostgreSQL[("PostgreSQL DB")]:::database
+    
+    Providers{"External LLMs (Google, OpenRouter, Groq)"}:::external
+
+    %% Edges
+    User -- "1. Sends Query" --> UI
+    UI -- "2. POST /api/v1/chat/stream" --> API
+    
+    API -- "3. Check Cache" --> RedisCache
+    RedisCache -. "Cache Hit (Skip LLM)" .-> UI
+    
+    API -- "4. Cache Miss (Analyze Intent)" --> IntentAgent
+    IntentAgent -- "Determines Complexity & Task" --> ModelSelector
+    
+    ModelSelector -- "5. Fetch Active Models" --> PostgreSQL
+    PostgreSQL -. "Returns Registry & Benchmarks" .-> ModelSelector
+    ModelSelector -- "6. Multi-Stage Scoring" --> ModelSelector
+    
+    ModelSelector -- "7. Returns Selected Model" --> API
+    
+    API -- "8. Log Decision" --> PostgreSQL
+    API -- "9. Append to CSV" --> CSVLogger
+    
+    API -- "10. Init Stream" --> StreamingService
+    StreamingService -- "11. Fetch Conversation History" --> RedisCache
+    StreamingService -- "12. Generate Tokens" --> Providers
+    
+    Providers -- "13. Stream SSE" --> StreamingService
+    StreamingService -- "14. Stream Tokens to Client" --> UI
+    
+    Dashboard -- "Fetch Metrics" --> PostgreSQL
+```
+
+---
+
 ## 🚀 Quickstart (Docker)
 
 The easiest way to run ModelRouter AI is using Docker Compose.
