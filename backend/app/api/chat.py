@@ -52,6 +52,18 @@ async def stream_chat_endpoint(
         else:
             logger.error(f"Manual model ID not found: {request.manual_model_id}. Falling back to default.")
     else:
+        import tiktoken
+        
+        # Dynamically estimate token count using tiktoken
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            actual_tokens = len(encoding.encode(request.query))
+            # Add some overhead for conversation history
+            estimated_tokens = actual_tokens + 200 
+        except Exception as e:
+            logger.warning(f"Tiktoken counting failed: {e}. Falling back to 500.")
+            estimated_tokens = 500
+
         # 1. Analyze Intent
         intent_agent = IntentAgent()
         try:
@@ -65,28 +77,24 @@ async def stream_chat_endpoint(
                 task="chat",
                 confidence=0.5,
                 complexity="low",
-                requires_tools=False
+                requires_tools=False,
+                recommended_tier="fast",
+                rationale="Fallback default due to analysis failure."
             )
             
         intent_task = intent_data.task
         intent_complexity = intent_data.complexity
     
-        # 2. Map Intent Complexity to Cost/Tier
-        recommended_tier = "fast"
-        if intent_data.task in ["coding", "programming", "sql", "math", "reasoning"]:
-            recommended_tier = "powerful"
-        elif intent_data.complexity == "high":
-            recommended_tier = "powerful"
-        elif intent_data.complexity == "medium":
-            recommended_tier = "powerful" if intent_data.requires_tools else "fast"
+        # 2. Extract LLM-Driven Tier & Rationale
+        recommended_tier = intent_data.recommended_tier
             
         cost_data = CostOptimization(
-            estimated_tokens=500,  # naive placeholder
+            estimated_tokens=estimated_tokens,
             recommended_tier=recommended_tier,
             max_budget_usd=0.05,
-            rationale=f"Intent complexity is {intent_data.complexity}."
+            rationale=intent_data.rationale
         )
-        logger.info(f"MAPPED TIER: {recommended_tier}")
+        logger.info(f"DYNAMIC TIER SELECTED: {recommended_tier} (Estimated Tokens: {estimated_tokens})")
     
         # 3. Dynamically Select Best Model
         model_selector = ModelSelectionAgent()

@@ -42,3 +42,11 @@ class IntentClassification(BaseModel):
         False,
         description="Whether the user request likely requires external tools (like calculator, search, execution) to answer."
     )
+    recommended_tier: Literal["fast", "powerful"] = Field(
+        "fast",
+        description="The recommended model tier for this query based on its semantic complexity and task type."
+    )
+    rationale: str = Field(
+        "",
+        description="The exact reasoning for why this tier was selected."
+    )

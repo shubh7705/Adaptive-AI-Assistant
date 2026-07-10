@@ -27,12 +27,19 @@ Estimate the complexity. Must be one of: 'low', 'medium', 'high'.
 Determine if it strictly requires external tools (boolean).
 Assign a confidence score between 0.0 and 1.0.
 
+CRITICAL NEW STEP: Based on the complexity and the semantic nature of the task, output a "recommended_tier". 
+- Use "fast" for basic chat, greeting, summarization, translation, extraction, etc.
+- Use "powerful" for ANY coding, sql, math, programming, heavy reasoning, or if requires_tools is true.
+Provide a clear "rationale" explaining why this tier was selected based on the task and complexity.
+
 Return ONLY a raw JSON object with NO markdown formatting, strictly matching this schema:
 {
   "task": "...",
   "confidence": 0.95,
   "complexity": "medium",
-  "requires_tools": false
+  "requires_tools": false,
+  "recommended_tier": "fast",
+  "rationale": "The user is asking a basic question that does not require heavy reasoning."
 }
 """)
 
