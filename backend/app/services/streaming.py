@@ -99,5 +99,37 @@ class StreamingService:
             
             yield "data: [DONE]\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            yield "data: [DONE]\n\n"
+            # FALLBACK ROUTER LOGIC
+            from app.config.logger import logger
+            logger.error(f"Primary model {self.model_name} failed: {e}. Falling back to gemini-2.5-flash.")
+            
+            try:
+                # Notify frontend of fallback
+                yield f"data: {json.dumps({'fallback': True, 'model': 'gemini-2.5-flash', 'error': 'Rate limit or API error detected. Switched to fallback model.'})}\n\n"
+                
+                # Initialize fallback model
+                fallback_api_key = settings.GOOGLE_API_KEY
+                if not fallback_api_key:
+                    raise ValueError("No GOOGLE_API_KEY available for fallback.")
+                    
+                fallback_llm = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash", 
+                    api_key=fallback_api_key,
+                    streaming=True
+                )
+                
+                full_response = ""
+                async for chunk in fallback_llm.astream(messages):
+                    if chunk.content:
+                        full_response += chunk.content
+                        yield f"data: {json.dumps({'token': chunk.content})}\n\n"
+                
+                await self.memory_store.add_message(session_id, {"role": "user", "content": query})
+                await self.memory_store.add_message(session_id, {"role": "assistant", "content": full_response})
+                
+                yield "data: [DONE]\n\n"
+            except Exception as fallback_e:
+                # If fallback also fails, return the error
+                logger.error(f"Fallback model also failed: {fallback_e}")
+                yield f"data: {json.dumps({'error': f'Primary AND Fallback models failed. Error: {fallback_e}'})}\n\n"
+                yield "data: [DONE]\n\n"

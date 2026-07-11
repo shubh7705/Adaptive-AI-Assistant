@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.analytics import ModelMetrics
-from typing import Dict
+from typing import Dict, List
 
 class MetricsService:
     """
@@ -11,8 +11,11 @@ class MetricsService:
     def __init__(self, db: AsyncSession):
         self.db = db
         
-    async def get_metrics(self) -> Dict[str, ModelMetrics]:
-        result = await self.db.execute(select(ModelMetrics))
+    async def get_metrics(self, eligible_ids: List[str] = None) -> Dict[str, ModelMetrics]:
+        if eligible_ids is not None:
+            result = await self.db.execute(select(ModelMetrics).where(ModelMetrics.model_id.in_(eligible_ids)))
+        else:
+            result = await self.db.execute(select(ModelMetrics))
         metrics = result.scalars().all()
         return {m.model_id: m for m in metrics}
         
@@ -43,4 +46,4 @@ class MetricsService:
         if tokens_per_sec > 0:
             metrics.average_tokens_per_sec = (alpha * tokens_per_sec) + ((1 - alpha) * metrics.average_tokens_per_sec) if metrics.average_tokens_per_sec else tokens_per_sec
             
-        await self.db.commit()
+        await self.db.flush()
