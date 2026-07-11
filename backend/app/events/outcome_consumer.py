@@ -96,6 +96,12 @@ async def start_outcome_consumer() -> None:
             logger.info("Outcome consumer shutting down.")
             break
         except Exception as e:
+            # redis.asyncio raises TimeoutError when block= expires with no messages.
+            # This is normal (the stream is simply empty) — suppress the log and loop.
+            import redis as redis_lib
+            if isinstance(e, redis_lib.exceptions.TimeoutError):
+                continue
+            # Any other exception is a real connectivity/infrastructure problem.
             logger.error(f"Outcome consumer error: {e}. Retrying in 5s.")
             await asyncio.sleep(5)
 
