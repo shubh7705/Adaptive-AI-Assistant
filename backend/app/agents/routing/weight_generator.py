@@ -19,7 +19,7 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-WEIGHTS_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "routing_weights.yaml")
+WEIGHTS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "config", "routing_weights.yaml")
 
 
 @dataclass
