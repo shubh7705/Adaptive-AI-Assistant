@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict, Optional
 from app.models.registry import ModelRegistry
+from app.models.analytics import ModelMetrics
 from app.schemas.intent import IntentClassification
+from app.config.settings import settings
 
 
 @dataclass
@@ -28,9 +30,20 @@ class CapabilityFilter:
         models: List[ModelRegistry],
         intent: IntentClassification,
         budget: float = 100.0,
+        metrics: Optional[Dict[str, ModelMetrics]] = None,
     ) -> CandidateResult:
+        threshold = settings.CIRCUIT_BREAKER_ERROR_THRESHOLD
 
-        active = [m for m in models if m.is_active]
+        def _is_circuit_broken(m: ModelRegistry) -> bool:
+            """True if this model should be hard-excluded due to high error rate."""
+            if metrics is None:
+                return False
+            model_metrics = metrics.get(str(m.id))
+            if model_metrics is None:
+                return False
+            return model_metrics.error_rate > threshold
+
+        active = [m for m in models if m.is_active and not _is_circuit_broken(m)]
 
         # --- Level 1: Strict — all constraints satisfied ---
         strict = [

@@ -25,9 +25,10 @@ class RoutingHistoryService:
             cls._redis_pool = redis.from_url(redis_url, decode_responses=True)
         return cls._redis_pool
 
-    async def record_selection(self, model_id: str, limit: int = 10):
+    async def record_selection(self, model_id: str, task_type: str = "chat", limit: int = 10):
         client = await self.get_client(self.redis_url)
-        key = "global_routing_history"
+        # Scoped per task_type so diversity penalties don't bleed across categories.
+        key = f"routing_history:{task_type}"
         try:
             await client.lpush(key, model_id)
             await client.ltrim(key, 0, limit - 1)
@@ -36,15 +37,15 @@ class RoutingHistoryService:
             if not _history_warned:
                 print("Warning: Redis connection failed. Falling back to in-memory routing history.")
                 _history_warned = True
-                
+
             async with _fallback_lock:
                 _fallback_routing_history.insert(0, model_id)
                 if len(_fallback_routing_history) > limit:
                     _fallback_routing_history.pop()
 
-    async def get_recent_selections(self) -> List[str]:
+    async def get_recent_selections(self, task_type: str = "chat") -> List[str]:
         client = await self.get_client(self.redis_url)
-        key = "global_routing_history"
+        key = f"routing_history:{task_type}"
         try:
             return await client.lrange(key, 0, -1)
         except Exception:

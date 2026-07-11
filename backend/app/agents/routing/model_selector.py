@@ -43,8 +43,15 @@ class ModelSelectionAgent:
             raise ValueError("No active models found in the registry!")
 
         # 2. Hard Requirements Filtering (Stage 1)
+        # Fetch all-model metrics first so CapabilityFilter can circuit-break
+        # models with error_rate > CIRCUIT_BREAKER_ERROR_THRESHOLD before scoring.
+        all_metrics_svc = MetricsService(db)
+        all_metrics = await all_metrics_svc.get_metrics()  # no id filter — needed for circuit-breaker
+
         # CandidateResult surfaces which constraints were relaxed (if any).
-        candidate_result: CandidateResult = CapabilityFilter.filter(all_models, intent_data, cost_data.max_budget_usd)
+        candidate_result: CandidateResult = CapabilityFilter.filter(
+            all_models, intent_data, cost_data.max_budget_usd, metrics=all_metrics
+        )
         eligible_models = candidate_result.models
         relaxation_level = candidate_result.relaxation_level
         dropped_constraints = candidate_result.dropped_constraints
@@ -67,7 +74,7 @@ class ModelSelectionAgent:
         eligible_ids = [m.id for m in eligible_models]
         benchmarks = await benchmark_service.get_benchmarks(eligible_ids)
         metrics = await metrics_service.get_metrics(eligible_ids)
-        recent_selections = await history_service.get_recent_selections()
+        recent_selections = await history_service.get_recent_selections(task_type=intent_data.task)
         
         # 5. Multi-Dimensional Scoring (Stage 4, 7, 9)
         # Pre-compute max cost among eligible models to normalize cost_penalty correctly.
@@ -92,7 +99,7 @@ class ModelSelectionAgent:
         selected_model, final_score, routing_meta, runner_ups = CandidateRanker.select_best_model(scored_models, top_k=3)
         
         # 7. Record History — cast to str so it matches what Redis returns as strings.
-        await history_service.record_selection(str(selected_model.id))
+        await history_service.record_selection(str(selected_model.id), task_type=intent_data.task)
         
         # 8. Return Explainable Payload (Stage 10)
         rationale = routing_meta.pop("reason", "Selected by hybrid router.")

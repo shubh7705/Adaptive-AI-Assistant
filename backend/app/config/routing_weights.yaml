@@ -1,0 +1,115 @@
+# routing_weights.yaml
+# Hot-reloadable weight configuration for DynamicWeightGenerator.
+# Edit this file and the router picks up the changes on the next request
+# (TTL cache expires after ROUTING_CACHE_TTL_SECONDS seconds).
+#
+# Each key matches an IntentType. The "default" key is used for any unmatched intent.
+# All weight values per entry should ideally sum to 1.0.
+
+coding:
+  coding: 0.45
+  reasoning: 0.25
+  math: 0.0
+  vision: 0.0
+  creative: 0.0
+  latency: 0.15
+  cost: 0.15
+
+programming:
+  coding: 0.45
+  reasoning: 0.25
+  math: 0.0
+  vision: 0.0
+  creative: 0.0
+  latency: 0.15
+  cost: 0.15
+
+sql:
+  coding: 0.45
+  reasoning: 0.25
+  math: 0.0
+  vision: 0.0
+  creative: 0.0
+  latency: 0.15
+  cost: 0.15
+
+vision:
+  coding: 0.0
+  reasoning: 0.20
+  math: 0.0
+  vision: 0.50
+  creative: 0.0
+  latency: 0.15
+  cost: 0.15
+
+math:
+  coding: 0.0
+  reasoning: 0.30
+  math: 0.50
+  vision: 0.0
+  creative: 0.0
+  latency: 0.10
+  cost: 0.10
+
+data_analysis:
+  coding: 0.0
+  reasoning: 0.30
+  math: 0.50
+  vision: 0.0
+  creative: 0.0
+  latency: 0.10
+  cost: 0.10
+
+summarization:
+  coding: 0.0
+  reasoning: 0.30
+  math: 0.0
+  vision: 0.0
+  creative: 0.30
+  latency: 0.20
+  cost: 0.20
+
+extraction:
+  coding: 0.0
+  reasoning: 0.30
+  math: 0.0
+  vision: 0.0
+  creative: 0.30
+  latency: 0.20
+  cost: 0.20
+
+creative:
+  coding: 0.0
+  reasoning: 0.10
+  math: 0.0
+  vision: 0.0
+  creative: 0.60
+  latency: 0.10
+  cost: 0.20
+
+chat:
+  coding: 0.0
+  reasoning: 0.20
+  math: 0.0
+  vision: 0.0
+  creative: 0.20
+  latency: 0.40
+  cost: 0.20
+
+reasoning:
+  coding: 0.10
+  reasoning: 0.60
+  math: 0.0
+  vision: 0.0
+  creative: 0.0
+  latency: 0.15
+  cost: 0.15
+
+default:
+  coding: 0.10
+  reasoning: 0.30
+  math: 0.0
+  vision: 0.0
+  creative: 0.10
+  latency: 0.25
+  cost: 0.25

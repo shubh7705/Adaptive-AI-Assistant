@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: Optional[str] = None
     LANGCHAIN_PROJECT: str = "ModelRouterAI"
 
+    # Routing engine tuning
+    ROUTING_CACHE_TTL_SECONDS: int = 10        # How long benchmark/metric feature data is cached
+    CIRCUIT_BREAKER_ERROR_THRESHOLD: float = 0.20  # Models above this error_rate are excluded
+    BANDIT_EPSILON: float = 0.10               # Exploration rate for epsilon-greedy candidate ranker
+
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),
         env_file_encoding="utf-8",

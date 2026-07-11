@@ -1,3 +1,8 @@
+from contextlib import asynccontextmanager
+from app.database.session import engine
+from app.database.base import Base
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -15,10 +20,6 @@ def create_app() -> FastAPI:
     # Initialize Semantic Cache
     cache_manager = SemanticCacheManager()
     cache_manager.initialize_cache()
-
-    from contextlib import asynccontextmanager
-    from app.database.session import engine
-    from app.database.base import Base
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -145,8 +146,21 @@ def create_app() -> FastAPI:
                     session.add(ModelMetrics(model_id=m_id))
                     
             await session.commit()
-                
+
+        # Start the async outcome consumer background task.
+        # It reads from Redis Streams and updates MetricsService + HistoryService
+        # asynchronously, fully decoupled from the request path.
+        from app.events.outcome_consumer import start_outcome_consumer
+        consumer_task = asyncio.create_task(start_outcome_consumer())
+
         yield
+
+        # Graceful shutdown: cancel the consumer task
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
 
     app = FastAPI(
         title=settings.APP_NAME,
