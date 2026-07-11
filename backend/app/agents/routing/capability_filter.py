@@ -1,43 +1,86 @@
+from dataclasses import dataclass, field
 from typing import List
 from app.models.registry import ModelRegistry
 from app.schemas.intent import IntentClassification
 
+
+@dataclass
+class CandidateResult:
+    """
+    Structured result from CapabilityFilter.filter().
+    Carries both the eligible model list AND an explanation of whether/which
+    constraints had to be relaxed to produce a non-empty candidate set.
+    """
+    models: List[ModelRegistry]
+    relaxation_level: str          # "strict" | "dropped_budget" | "dropped_tools" | "dropped_vision" | "fallback_all_active"
+    dropped_constraints: List[str] = field(default_factory=list)
+
+
 class CapabilityFilter:
     """
     Stage 1: Filters models based on hard constraints from the required intent.
-    If no model satisfies all constraints, relaxes the least important constraints gracefully.
+    Returns a CandidateResult that indicates which (if any) constraints were
+    relaxed to guarantee a non-empty candidate set.
     """
-    
+
     @staticmethod
-    def filter(models: List[ModelRegistry], intent: IntentClassification, budget: float = 100.0) -> List[ModelRegistry]:
-        eligible = []
-        
-        # Primary strict filtering
-        for m in models:
-            if not m.is_active:
-                continue
-            if intent.requires_tools and not m.supports_tools:
-                continue
-            if intent.task == "vision" and not m.supports_vision:
-                continue
-            if m.cost_per_1k_tokens > budget:
-                continue
-            
-            eligible.append(m)
-            
-        if eligible:
-            return eligible
-            
-        # Relaxation 1: Drop budget requirement
-        relaxed_eligible_budget = [m for m in models if m.is_active and (not intent.requires_tools or m.supports_tools) and (intent.task != "vision" or m.supports_vision)]
-        if relaxed_eligible_budget:
-            return relaxed_eligible_budget
-            
-        # Relaxation 2: Drop tools and budget requirement
+    def filter(
+        models: List[ModelRegistry],
+        intent: IntentClassification,
+        budget: float = 100.0,
+    ) -> CandidateResult:
+
+        active = [m for m in models if m.is_active]
+
+        # --- Level 1: Strict — all constraints satisfied ---
+        strict = [
+            m for m in active
+            if (not intent.requires_tools or m.supports_tools)
+            and (intent.task != "vision" or m.supports_vision)
+            and (m.cost_per_1k_tokens <= budget)
+        ]
+        if strict:
+            return CandidateResult(models=strict, relaxation_level="strict")
+
+        # --- Level 2: Drop budget constraint ---
+        dropped_budget = [
+            m for m in active
+            if (not intent.requires_tools or m.supports_tools)
+            and (intent.task != "vision" or m.supports_vision)
+        ]
+        if dropped_budget:
+            return CandidateResult(
+                models=dropped_budget,
+                relaxation_level="dropped_budget",
+                dropped_constraints=["budget"],
+            )
+
+        # --- Level 3: Drop tools constraint (budget already dropped) ---
         if intent.requires_tools:
-            relaxed_eligible_tools = [m for m in models if m.is_active and (intent.task != "vision" or m.supports_vision)]
-            if relaxed_eligible_tools:
-                return relaxed_eligible_tools
-                
-        # Ultimate fallback: return all active models
-        return [m for m in models if m.is_active]
+            dropped_tools = [
+                m for m in active
+                if (intent.task != "vision" or m.supports_vision)
+            ]
+            if dropped_tools:
+                return CandidateResult(
+                    models=dropped_tools,
+                    relaxation_level="dropped_tools",
+                    dropped_constraints=["budget", "tools"],
+                )
+
+        # --- Level 4: Drop vision constraint (if applicable) ---
+        if intent.task == "vision":
+            dropped_vision = list(active)
+            if dropped_vision:
+                return CandidateResult(
+                    models=dropped_vision,
+                    relaxation_level="dropped_vision",
+                    dropped_constraints=["budget", "tools", "vision"],
+                )
+
+        # --- Level 5: Ultimate fallback — all active models ---
+        return CandidateResult(
+            models=active,
+            relaxation_level="fallback_all_active",
+            dropped_constraints=["budget", "tools", "vision"],
+        )

@@ -1,7 +1,6 @@
 import asyncio
 import redis.asyncio as redis
-from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 from app.config.settings import settings
 
 # Global fallback for routing history
@@ -16,9 +15,8 @@ class RoutingHistoryService:
     """
     _redis_pool = None
 
-    def __init__(self, db: Optional[AsyncSession] = None):
+    def __init__(self):
         self.redis_url = settings.REDIS_URL
-        self.db = db
 
     @classmethod
     async def get_client(cls, redis_url: str):

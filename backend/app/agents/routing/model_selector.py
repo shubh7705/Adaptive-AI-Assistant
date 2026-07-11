@@ -5,7 +5,7 @@ from app.schemas.intent import IntentClassification
 from app.schemas.cost import CostOptimization
 from app.schemas.selection import ModelSelection
 
-from app.agents.routing.capability_filter import CapabilityFilter
+from app.agents.routing.capability_filter import CapabilityFilter, CandidateResult
 from app.agents.routing.weight_generator import DynamicWeightGenerator
 from app.agents.routing.benchmark_service import BenchmarkService
 from app.agents.routing.metrics_service import MetricsService
@@ -43,19 +43,17 @@ class ModelSelectionAgent:
             raise ValueError("No active models found in the registry!")
 
         # 2. Hard Requirements Filtering (Stage 1)
-        eligible_models = CapabilityFilter.filter(all_models, intent_data, cost_data.max_budget_usd)
-        
-        # --- Stage 2: Fallback Handling Strategy ---
-        # If hard constraints wipe out candidates, fall back to all active models 
-        # to ensure system availability, but flag it in the rationale.
-        using_fallback = False
-        if not eligible_models:
+        # CandidateResult surfaces which constraints were relaxed (if any).
+        candidate_result: CandidateResult = CapabilityFilter.filter(all_models, intent_data, cost_data.max_budget_usd)
+        eligible_models = candidate_result.models
+        relaxation_level = candidate_result.relaxation_level
+        dropped_constraints = candidate_result.dropped_constraints
+
+        if relaxation_level != "strict":
             logger.warning(
-                f"No models met strict criteria for task '{intent_data.task}' "
-                f"with budget ${cost_data.max_budget_usd}. Invoking fallback routing."
+                f"Constraint relaxation triggered for task '{intent_data.task}': "
+                f"level='{relaxation_level}', dropped={dropped_constraints}"
             )
-            eligible_models = all_models
-            using_fallback = True
         
         # 3. Dynamic Weight Generation (Stage 3)
         weights = DynamicWeightGenerator.get_weights(intent_data.task)
@@ -64,7 +62,7 @@ class ModelSelectionAgent:
         # Pass the current request's async session to isolate database transactions
         benchmark_service = BenchmarkService(db)
         metrics_service = MetricsService(db)
-        history_service = RoutingHistoryService(db) 
+        history_service = RoutingHistoryService()
         
         eligible_ids = [m.id for m in eligible_models]
         benchmarks = await benchmark_service.get_benchmarks(eligible_ids)
@@ -72,6 +70,10 @@ class ModelSelectionAgent:
         recent_selections = await history_service.get_recent_selections()
         
         # 5. Multi-Dimensional Scoring (Stage 4, 7, 9)
+        # Pre-compute max cost among eligible models to normalize cost_penalty correctly.
+        max_eligible_cost = max(
+            (m.cost_per_1k_tokens for m in eligible_models), default=0.06
+        )
         scored_models = []
         for m in eligible_models:
             score, metadata = ScoringService.score_model(
@@ -81,21 +83,26 @@ class ModelSelectionAgent:
                 metrics=metrics.get(m.id),
                 recent_selections=recent_selections,
                 confidence=intent_data.confidence,
-                recommended_tier=cost_data.recommended_tier
+                recommended_tier=cost_data.recommended_tier,
+                max_eligible_cost=max_eligible_cost,
             )
             scored_models.append((m, score, metadata))
             
         # 6. Top-K Candidate Selection (Stage 8)
         selected_model, final_score, routing_meta, runner_ups = CandidateRanker.select_best_model(scored_models, top_k=3)
         
-        # 7. Record History (Stage 9)
-        await history_service.record_selection(selected_model.id)
+        # 7. Record History — cast to str so it matches what Redis returns as strings.
+        await history_service.record_selection(str(selected_model.id))
         
         # 8. Return Explainable Payload (Stage 10)
         rationale = routing_meta.pop("reason", "Selected by hybrid router.")
-        if using_fallback:
-            rationale = f"[FALLBACK ACTIVATED] {rationale} (Strict constraints relaxed to maintain service availability)."
-            routing_meta["fallback_triggered"] = True
+        if relaxation_level != "strict":
+            rationale = (
+                f"[CONSTRAINT RELAXATION: {relaxation_level.upper()}] {rationale} "
+                f"(Dropped constraints: {dropped_constraints})"
+            )
+            routing_meta["relaxation_level"] = relaxation_level
+            routing_meta["dropped_constraints"] = dropped_constraints
 
         return ModelSelection(
             selected_model_id=selected_model.id,

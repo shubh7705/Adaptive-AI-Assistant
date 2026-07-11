@@ -17,14 +17,18 @@ class ScoringService:
         metrics: ModelMetrics,
         recent_selections: list[str],
         confidence: float,
-        recommended_tier: str = "fast"
+        recommended_tier: str = "fast",
+        max_eligible_cost: float = 0.06,  # fallback if caller doesn't supply it
     ) -> Tuple[float, Dict[str, Any]]:
         
         # 1. Base Benchmark Capability Score (Intent-weighted)
         b_coding = benchmark.coding_score if benchmark else 5.0
         b_reasoning = benchmark.reasoning_score if benchmark else 5.0
         b_math = benchmark.math_score if benchmark else 5.0
-        b_vision = benchmark.vision_score if benchmark else 0.0
+        # Vision score only contributes when weights.vision > 0 (i.e., intent.task == "vision").
+        # CapabilityFilter already gates non-vision models out for vision tasks, so
+        # defaulting to 5.0 (neutral midpoint) keeps scoring consistent across all categories.
+        b_vision = benchmark.vision_score if benchmark else 5.0
         b_creative = benchmark.creative_score if benchmark else 5.0
         
         capability_score = (
@@ -45,7 +49,11 @@ class ScoringService:
             arena_bonus = arena_normalized * 0.5  # Boost generalists when uncertain
 
         # 3. Cost & Latency Penalties
-        cost_penalty = model.cost_per_1k_tokens * weights.cost * 10.0 # Scale cost penalty up
+        # Normalize relative to the most expensive eligible model so the penalty
+        # spans 0 (cheapest) → weights.cost * 5.0 (most expensive).  
+        # Old formula (cost * weights * 10) produced ~0.001–0.12 — effectively noise.
+        cost_ratio = model.cost_per_1k_tokens / max_eligible_cost if max_eligible_cost > 0 else 0.0
+        cost_penalty = min(cost_ratio * weights.cost * 5.0, 5.0)
         
         avg_latency = metrics.average_latency_ms if metrics else 1000.0
         # Normalize latency penalty (e.g. 1000ms = 1 penalty point)
@@ -56,8 +64,9 @@ class ScoringService:
         error_penalty = min(error_rate * 5.0, 5.0) # Max 5 point penalty for 100% error rate
         
         # 5. Diversity Bonus / Penalty (Stage 9)
-        # If the model was selected many times recently, penalize it slightly.
-        recent_count = recent_selections.count(model.id)
+        # Cast to str: Redis returns plain strings; model.id is a UUID object.
+        # Without this cast, count() always returns 0 and the diversity penalty never fires.
+        recent_count = recent_selections.count(str(model.id))
         diversity_penalty = recent_count * 0.2
         
         # 6. Tier Match Penalty (Strict Enforcement)
