@@ -7,7 +7,6 @@ from app.database.session import get_db
 from app.models.registry import ModelRegistry
 from app.models.analytics import ModelBenchmarks, ModelMetrics
 from app.schemas.registry import ModelRegistryCreate, ModelRegistryResponse
-from app.services.auth import get_current_user
 from app.services.model_validator import validate_model_active
 
 router = APIRouter()
@@ -39,12 +38,8 @@ async def get_all_models(db: AsyncSession = Depends(get_db)):
 @router.post("/", response_model=ModelRegistryResponse, status_code=status.HTTP_201_CREATED)
 async def add_model(
     model_data: ModelRegistryCreate, 
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
-    if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to add models")
-        
     # Check if model already exists
     result = await db.execute(select(ModelRegistry).where(ModelRegistry.name == model_data.name))
     existing_model = result.scalars().first()
