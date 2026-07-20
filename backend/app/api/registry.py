@@ -5,8 +5,10 @@ from typing import List
 
 from app.database.session import get_db
 from app.models.registry import ModelRegistry
+from app.models.analytics import ModelBenchmarks, ModelMetrics
 from app.schemas.registry import ModelRegistryCreate, ModelRegistryResponse
 from app.services.auth import get_current_user
+from app.services.model_validator import validate_model_active
 
 router = APIRouter()
 
@@ -49,8 +51,21 @@ async def add_model(
     if existing_model:
         raise HTTPException(status_code=400, detail="Model already registered")
         
+    # Ping provider API to validate the model is active and correct
+    try:
+        await validate_model_active(model_data.name, model_data.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    # Insert new model
     new_model = ModelRegistry(**model_data.model_dump())
     db.add(new_model)
+    await db.flush() # flush to get the UUID generated
+    
+    # Insert required analytical rows so routing doesn't fail
+    db.add(ModelBenchmarks(model_id=new_model.id))
+    db.add(ModelMetrics(model_id=new_model.id))
+    
     await db.commit()
     await db.refresh(new_model)
     
