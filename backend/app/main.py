@@ -120,6 +120,16 @@ def create_app() -> FastAPI:
                     supports_streaming=True,
                     supports_tools=True,
                     is_active=True
+                ),
+                ModelRegistry(
+                    id="seed-kimi-k2-6-openrouter",
+                    name="moonshotai/kimi-k2.6:free",
+                    provider="openrouter",
+                    description="Moonshot AI's Kimi K2.6 model.",
+                    cost_per_1k_tokens=0.0,
+                    supports_streaming=True,
+                    supports_tools=True,
+                    is_active=True
                 )
             ]
             
