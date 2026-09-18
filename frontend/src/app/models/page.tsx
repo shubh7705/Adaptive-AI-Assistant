@@ -17,6 +17,7 @@ interface Model {
 export default function ModelsRegistry() {
   const [models, setModels] = useState<Model[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   
   // Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -33,14 +34,17 @@ export default function ModelsRegistry() {
   })
 
   const fetchModels = () => {
-    fetch('http://127.0.0.1:8000/api/v1/registry/')
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    fetch(`${apiUrl}/api/v1/registry/`)
       .then(res => res.json())
       .then(data => {
         setModels(data)
         setIsLoading(false)
       })
       .catch(err => {
+        console.error("Failed to fetch models:", err)
         setModels([])
+        setFetchError("Failed to load models. Please check your connection.")
         setIsLoading(false)
       })
   }
@@ -55,12 +59,12 @@ export default function ModelsRegistry() {
     setErrorMsg('')
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/registry/', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/v1/registry/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Assuming basic role simulation for admin based on your auth setup
-          'Authorization': 'Bearer admin_token_simulation' 
+          ...(typeof window !== 'undefined' && localStorage.getItem('auth_token') ? { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` } : {})
         },
         body: JSON.stringify({
           ...formData,
@@ -81,11 +85,32 @@ export default function ModelsRegistry() {
         name: '', provider: 'openrouter', cost_per_1k_tokens: 0, supports_vision: false, supports_tools: false
       })
       fetchModels() // Refresh list
-    } catch (err: any) {
-      setErrorMsg(err.message)
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to add model')
     } finally {
       setIsAdding(false)
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 text-lg mb-2">{fetchError}</p>
+          <button onClick={() => window.location.reload()} className="text-primary hover:underline text-sm">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -169,10 +194,10 @@ export default function ModelsRegistry() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors">
+                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors" aria-label="Manage API key">
                         <Key className="h-4 w-4" />
                       </button>
-                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors">
+                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors" aria-label="View model details">
                         <Eye className="h-4 w-4" />
                       </button>
                     </div>
@@ -187,7 +212,13 @@ export default function ModelsRegistry() {
       {/* Add Model Modal */}
       <AnimatePresence>
         {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-model-title"
+            onKeyDown={(e) => { if (e.key === 'Escape') setIsAddModalOpen(false) }}
+          >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -195,8 +226,8 @@ export default function ModelsRegistry() {
               className="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/10"
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-white">Add New Model</h2>
-                <button onClick={() => setIsAddModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <h2 id="add-model-title" className="text-xl font-semibold text-white">Add New Model</h2>
+                <button onClick={() => setIsAddModalOpen(false)} aria-label="Close modal" className="text-white/50 hover:text-white transition-colors">
                   <X className="h-5 w-5" />
                 </button>
               </div>

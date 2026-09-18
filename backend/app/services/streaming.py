@@ -53,7 +53,26 @@ class StreamingService:
         else:
             self.llm = None
 
-    async def stream_chat(self, query: str, session_id: str = "default_session") -> AsyncGenerator[str, None]:
+    def _create_llm(self, model_name: str, provider: str):
+        provider = provider.lower()
+        if provider == "google":
+            api_key = settings.GOOGLE_API_KEY
+            return ChatGoogleGenerativeAI(model=model_name, api_key=api_key, streaming=True) if api_key else None
+        elif provider == "openrouter":
+            api_key = settings.OPENROUTER_API_KEY
+            return ChatOpenAI(model=model_name, api_key=api_key, base_url="https://openrouter.ai/api/v1", streaming=True, max_tokens=2000) if api_key else None
+        elif provider == "groq":
+            api_key = settings.GROQ_API_KEY
+            return ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.groq.com/openai/v1", streaming=True) if api_key else None
+        return None
+
+    async def stream_chat(
+        self,
+        query: str,
+        session_id: str = "default_session",
+        user_id: str = "default_user",
+        fallback_candidates: list = None,
+    ) -> AsyncGenerator[str, None]:
         """
         Yields tokens as Server-Sent Events (SSE) with conversation memory.
         """
@@ -67,7 +86,7 @@ class StreamingService:
             return
 
         # 1. Fetch conversational history from Redis (Limit to last 6 messages to prevent TPM errors)
-        raw_history = await self.memory_store.get_history(session_id)
+        raw_history = await self.memory_store.get_history(session_id, user_id=user_id)
         raw_history = raw_history[-6:]
         
         # 2. Format history into LangChain messages
@@ -81,7 +100,8 @@ class StreamingService:
         # 3. Append the current query
         messages.append(HumanMessage(content=query))
         
-        full_response = ""
+        full_response_parts: list[str] = []
+        has_emitted_tokens = False
         
         try:
             # Yield the model being used
@@ -89,47 +109,63 @@ class StreamingService:
             
             async for chunk in self.llm.astream(messages):
                 if chunk.content:
-                    full_response += chunk.content
-                    # Yield in standard SSE format
+                    has_emitted_tokens = True
+                    full_response_parts.append(chunk.content)
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
                     
-            # 4. Save the new exchange to Redis memory
-            await self.memory_store.add_message(session_id, {"role": "user", "content": query})
-            await self.memory_store.add_message(session_id, {"role": "assistant", "content": full_response})
+            full_response = "".join(full_response_parts)
+            await self.memory_store.add_message(session_id, {"role": "user", "content": query}, user_id=user_id)
+            await self.memory_store.add_message(session_id, {"role": "assistant", "content": full_response}, user_id=user_id)
             
             yield "data: [DONE]\n\n"
         except Exception as e:
-            # FALLBACK ROUTER LOGIC
             from app.config.logger import logger
-            logger.error(f"Primary model {self.model_name} failed: {e}. Falling back to gemini-2.5-flash.")
+            logger.error(f"Primary model {self.model_name} failed: {e}. Executing fallback routing...")
+            
+            # Select fallback target: runner up from candidate pool or default Gemini
+            fallback_model_name = "gemini-2.5-flash"
+            fallback_provider = "google"
+            if fallback_candidates:
+                for cand in fallback_candidates:
+                    c_name = cand.get("name") or cand.get("model_name")
+                    c_prov = cand.get("provider", "google")
+                    if c_name and c_name != self.model_name:
+                        fallback_model_name = c_name
+                        fallback_provider = c_prov
+                        break
             
             try:
                 # Notify frontend of fallback
-                yield f"data: {json.dumps({'fallback': True, 'model': 'gemini-2.5-flash', 'error': 'Rate limit or API error detected. Switched to fallback model.'})}\n\n"
+                yield f"data: {json.dumps({'fallback': True, 'model': fallback_model_name, 'error': f'Primary model unavailable ({str(e)[:100]}). Switched to {fallback_model_name}.'})}\n\n"
                 
-                # Initialize fallback model
-                fallback_api_key = settings.GOOGLE_API_KEY
-                if not fallback_api_key:
-                    raise ValueError("No GOOGLE_API_KEY available for fallback.")
-                    
-                fallback_llm = ChatGoogleGenerativeAI(
-                    model="gemini-2.5-flash", 
-                    api_key=fallback_api_key,
-                    streaming=True
-                )
+                fallback_llm = self._create_llm(fallback_model_name, fallback_provider)
+                if not fallback_llm:
+                    # Final safety fallback to Gemini if secondary failed to init
+                    fallback_model_name = "gemini-2.5-flash"
+                    fallback_provider = "google"
+                    fallback_llm = self._create_llm(fallback_model_name, fallback_provider)
                 
-                full_response = ""
+                if not fallback_llm:
+                    raise ValueError("No API key available for fallback model initialization.")
+                
+                # If partial output was already emitted to the user, add a clear separator to avoid token mixing
+                if has_emitted_tokens:
+                    separator = "\n\n*[Connection interrupted. Resuming with fallback model...]*\n\n"
+                    full_response_parts.append(separator)
+                    yield f"data: {json.dumps({'token': separator})}\n\n"
+
+                fallback_parts: list[str] = []
                 async for chunk in fallback_llm.astream(messages):
                     if chunk.content:
-                        full_response += chunk.content
+                        fallback_parts.append(chunk.content)
                         yield f"data: {json.dumps({'token': chunk.content})}\n\n"
                 
-                await self.memory_store.add_message(session_id, {"role": "user", "content": query})
-                await self.memory_store.add_message(session_id, {"role": "assistant", "content": full_response})
+                total_response = "".join(full_response_parts) + "".join(fallback_parts)
+                await self.memory_store.add_message(session_id, {"role": "user", "content": query}, user_id=user_id)
+                await self.memory_store.add_message(session_id, {"role": "assistant", "content": total_response}, user_id=user_id)
                 
                 yield "data: [DONE]\n\n"
             except Exception as fallback_e:
-                # If fallback also fails, return the error
-                logger.error(f"Fallback model also failed: {fallback_e}")
-                yield f"data: {json.dumps({'error': f'Primary AND Fallback models failed. Error: {fallback_e}'})}\n\n"
+                logger.error(f"Fallback model ({fallback_model_name}) failed: {fallback_e}")
+                yield f"data: {json.dumps({'error': 'Both primary and fallback models failed. Please try again later.'})}\n\n"
                 yield "data: [DONE]\n\n"

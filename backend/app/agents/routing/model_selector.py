@@ -42,19 +42,32 @@ class ModelSelectionAgent:
         if not all_models:
             raise ValueError("No active models found in the registry!")
 
-        # 2. Hard Requirements Filtering (Stage 1)
-        # Fetch all-model metrics first so CapabilityFilter can circuit-break
-        # models with error_rate > CIRCUIT_BREAKER_ERROR_THRESHOLD before scoring.
-        all_metrics_svc = MetricsService(db)
-        all_metrics = await all_metrics_svc.get_metrics()  # no id filter — needed for circuit-breaker
+        # 2. Fetch Runtime Metadata (Stages 5, 6, 9)
+        # We fetch this BEFORE filtering now because the new Tier Match logic in 
+        # CapabilityFilter requires arena_score (from benchmarks) and error_rate (from metrics).
+        benchmark_service = BenchmarkService(db)
+        metrics_service = MetricsService(db)
+        history_service = RoutingHistoryService()
+        
+        all_ids = [m.id for m in all_models]
+        all_benchmarks = await benchmark_service.get_benchmarks(all_ids)
+        all_metrics = await metrics_service.get_metrics(all_ids)
 
-        # CandidateResult surfaces which constraints were relaxed (if any).
+        # 3. Hard Requirements & Tier Filtering (Stage 1)
         candidate_result: CandidateResult = CapabilityFilter.filter(
-            all_models, intent_data, cost_data.max_budget_usd, metrics=all_metrics
+            models=all_models, 
+            intent=intent_data, 
+            budget=cost_data.max_budget_usd, 
+            estimated_tokens=cost_data.estimated_tokens,
+            metrics=all_metrics,
+            benchmarks=all_benchmarks,
+            recommended_tier=cost_data.recommended_tier
         )
+        
         eligible_models = candidate_result.models
         relaxation_level = candidate_result.relaxation_level
         dropped_constraints = candidate_result.dropped_constraints
+        trace = candidate_result.trace
 
         if relaxation_level != "strict":
             logger.warning(
@@ -62,32 +75,24 @@ class ModelSelectionAgent:
                 f"level='{relaxation_level}', dropped={dropped_constraints}"
             )
         
-        # 3. Dynamic Weight Generation (Stage 3)
+        # 4. Dynamic Weight Generation (Stage 3)
         weights = DynamicWeightGenerator.get_weights(intent_data.task)
         
-        # 4. Fetch Runtime Metadata (Stages 5, 6, 9)
-        # Pass the current request's async session to isolate database transactions
-        benchmark_service = BenchmarkService(db)
-        metrics_service = MetricsService(db)
-        history_service = RoutingHistoryService()
-        
-        eligible_ids = [m.id for m in eligible_models]
-        benchmarks = await benchmark_service.get_benchmarks(eligible_ids)
-        metrics = await metrics_service.get_metrics(eligible_ids)
+        # 5. Multi-Dimensional Scoring (Stage 4, 7, 9)
         recent_selections = await history_service.get_recent_selections(task_type=intent_data.task)
         
-        # 5. Multi-Dimensional Scoring (Stage 4, 7, 9)
-        # Pre-compute max cost among eligible models to normalize cost_penalty correctly.
         max_eligible_cost = max(
             (m.cost_per_1k_tokens for m in eligible_models), default=0.06
         )
         scored_models = []
+        
         for m in eligible_models:
+            m_id = str(m.id)
             score, metadata = ScoringService.score_model(
                 model=m,
                 weights=weights,
-                benchmark=benchmarks.get(m.id),
-                metrics=metrics.get(m.id),
+                benchmark=all_benchmarks.get(m.id),
+                metrics=all_metrics.get(m.id),
                 recent_selections=recent_selections,
                 confidence=intent_data.confidence,
                 recommended_tier=cost_data.recommended_tier,
@@ -95,12 +100,24 @@ class ModelSelectionAgent:
             )
             scored_models.append((m, score, metadata))
             
+            # Trace eligible but not-yet-ranked models
+            trace[m_id] = {
+                "status": "scored",
+                "stage": "scoring_service",
+                "final_score": score,
+                "breakdown": metadata.get("breakdown", {})
+            }
+            
         # 6. Top-K Candidate Selection (Stage 8)
-        selected_model, final_score, routing_meta, runner_ups = CandidateRanker.select_best_model(scored_models, top_k=3)
+        selected_model, final_score, routing_meta, runner_ups = CandidateRanker.select_best_model(
+            scored_models=scored_models, 
+            trace=trace,
+            top_k=3
+        )
         
-        # 7. Record History — cast to str so it matches what Redis returns as strings.
-        await history_service.record_selection(str(selected_model.id), task_type=intent_data.task)
-        
+        # 7. History and runtime metrics are updated from the final stream outcome.
+        # Recording here would count failed requests and duplicate the Redis-stream consumer.
+
         # 8. Return Explainable Payload (Stage 10)
         rationale = routing_meta.pop("reason", "Selected by hybrid router.")
         if relaxation_level != "strict":
@@ -118,5 +135,6 @@ class ModelSelectionAgent:
             score=final_score,
             rationale=rationale,
             runner_ups=runner_ups,
-            routing_metadata=routing_meta
+            routing_metadata=routing_meta,
+            trace=trace
         )

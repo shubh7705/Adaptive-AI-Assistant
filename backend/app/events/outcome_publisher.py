@@ -9,11 +9,12 @@ Stream key: routing:outcomes
 Consumer: backend/app/events/outcome_consumer.py (runs as a FastAPI background task)
 """
 
-import json
+import asyncio
 import redis.asyncio as redis
 from app.config.settings import settings
 
 STREAM_KEY = "routing:outcomes"
+_publisher_warned = False
 
 
 async def publish_outcome_event(
@@ -28,25 +29,34 @@ async def publish_outcome_event(
     Publishes a {model_id, task_type, latency_ms, success, tokens_per_sec, cost}
     event to the Redis Stream 'routing:outcomes'.
 
-    This is a fire-and-forget call; the background consumer handles all downstream
-    writes to RoutingHistoryService and MetricsService asynchronously.
+    If Redis is down/unreachable, falls back to local in-process handling via _process_event.
     """
+    payload = {
+        "model_id": str(model_id),
+        "task_type": task_type,
+        "latency_ms": str(latency_ms),
+        "success": "1" if success else "0",
+        "tokens_per_sec": str(tokens_per_sec),
+        "cost": str(cost),
+    }
+
     client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
-        await client.xadd(
-            STREAM_KEY,
-            {
-                "model_id": str(model_id),
-                "task_type": task_type,
-                "latency_ms": str(latency_ms),
-                "success": "1" if success else "0",
-                "tokens_per_sec": str(tokens_per_sec),
-                "cost": str(cost),
-            },
-        )
-    except Exception as e:
-        # Non-fatal: if Redis is down, we lose telemetry but the request still succeeds.
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to publish outcome event: {e}")
+        await client.xadd(STREAM_KEY, payload)
+    except Exception:
+        global _publisher_warned
+        if not _publisher_warned:
+            from app.config.logger import logger as loguru_logger
+            loguru_logger.warning("Redis is unreachable for event publishing. Processing routing outcomes in-memory.")
+            _publisher_warned = True
+        # Direct in-process fallback
+        try:
+            from app.events.outcome_consumer import _process_event
+            asyncio.create_task(_process_event(payload))
+        except Exception:
+            pass
     finally:
-        await client.aclose()
+        try:
+            await client.aclose()
+        except Exception:
+            pass

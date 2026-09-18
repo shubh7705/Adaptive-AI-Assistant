@@ -30,6 +30,7 @@ class CandidateRanker:
     @staticmethod
     def select_best_model(
         scored_models: List[Tuple[ModelRegistry, float, Dict[str, Any]]],
+        trace: Dict[str, Dict[str, Any]],
         top_k: int = 3,
     ) -> Tuple[ModelRegistry, float, Dict[str, Any], List[Dict]]:
 
@@ -62,16 +63,16 @@ class CandidateRanker:
                 logger.debug(f"Bandit explore: selected {selected[0].name}")
             else:
                 # Exploit: pick candidate with best observed real-world performance.
-                # We use (1 - error_penalty) * capability_score as a proxy for observed
-                # performance since we have it available in the scoring metadata.
-                # When the async feedback loop (Change 8) matures, replace with
-                # actual success_rate * tokens_per_sec from Redis outcome data.
+                # We use the new 100-point scale: capability minus error penalty.
                 def _exploit_score(candidate: Tuple) -> float:
                     _model, _score, meta = candidate
-                    error_pen = meta.get("error_penalty", 0.0)
-                    cap_score = meta.get("capability_score", 0.0)
-                    # Observed quality proxy: high capability, low error rate
-                    return cap_score * (1.0 - min(error_pen / 5.0, 1.0))
+                    breakdown = meta.get("breakdown", {})
+                    penalties = breakdown.get("penalties", {})
+                    
+                    error_pen = penalties.get("error_penalty", 0.0)
+                    cap_score = breakdown.get("base_capability", 0.0)
+                    # Observed quality proxy: high capability, low error rate (scaled to 100)
+                    return cap_score * (1.0 - min(error_pen / 10.0, 1.0))
 
                 selected = max(tied, key=_exploit_score)
                 reason = (
@@ -81,9 +82,24 @@ class CandidateRanker:
                 logger.debug(f"Bandit exploit: selected {selected[0].name}")
 
         selected_model, selected_score, selected_meta = selected
-        runner_ups = [
-            {"model_id": str(c[0].id), "name": c[0].name, "score": c[1]}
-            for c in top_candidates if str(c[0].id) != str(selected_model.id)
-        ]
+        
+        # Mark selected model in trace
+        trace[str(selected_model.id)]["status"] = "selected"
+        trace[str(selected_model.id)]["reason"] = reason
+        trace[str(selected_model.id)]["stage"] = "candidate_ranker"
+        
+        runner_ups = []
+        for c in top_candidates:
+            if str(c[0].id) != str(selected_model.id):
+                runner_ups.append({
+                    "model_id": str(c[0].id), 
+                    "name": c[0].name, 
+                    "score": c[1]
+                })
+                # Mark runner_up in trace
+                trace[str(c[0].id)]["status"] = "runner_up"
+                trace[str(c[0].id)]["reason"] = "Did not win tie-break or lower score"
+                trace[str(c[0].id)]["stage"] = "candidate_ranker"
+
         selected_meta["reason"] = reason
         return selected_model, selected_score, selected_meta, runner_ups

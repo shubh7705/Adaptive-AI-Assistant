@@ -2,44 +2,51 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Activity, DollarSign, Zap, Database, TrendingUp, BarChart3, Loader2 } from 'lucide-react'
+import { Activity, DollarSign, Zap, Database, TrendingUp, BarChart3, Loader2, type LucideIcon } from 'lucide-react'
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Cell
 } from 'recharts'
 
 export default function AnalyticsDashboard() {
-  const [stats, setStats] = useState<any[]>([]);
-  const [usageData, setUsageData] = useState<any[]>([]);
-  const [providerData, setProviderData] = useState<any[]>([]);
+  const [stats, setStats] = useState<Array<{ name: string; value: string; change: string; icon: LucideIcon; color: string }>>([]);
+  const [usageData, setUsageData] = useState<Array<{ time: string; tokens: number; cost: number }>>([]);
+  const [providerData, setProviderData] = useState<Array<{ provider: string; cost: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const [summaryRes, timeSeriesRes, providerRes] = await Promise.all([
-          fetch(`${apiUrl}/api/v1/analytics/summary`),
-          fetch(`${apiUrl}/api/v1/analytics/time-series`),
-          fetch(`${apiUrl}/api/v1/analytics/cost-by-provider`)
+          fetch(`${apiUrl}/api/v1/analytics/summary`, { headers }),
+          fetch(`${apiUrl}/api/v1/analytics/time-series`, { headers }),
+          fetch(`${apiUrl}/api/v1/analytics/cost-by-provider`, { headers })
         ]);
         
-        const summaryData = await summaryRes.json();
-        const timeSeriesData = await timeSeriesRes.json();
-        const providerData = await providerRes.json();
+        if (!summaryRes.ok || !timeSeriesRes.ok || !providerRes.ok) throw new Error('Analytics request failed')
+        const summaryData: { total_tokens?: number; total_cost_usd?: number; cache_hit_rate?: number; avg_latency_ms?: number } = await summaryRes.json();
+        const timeSeriesData: Array<{ time: string; tokens: number; cost: number }> = await timeSeriesRes.json();
+        const providerJson: Array<{ provider: string; cost: number }> = await providerRes.json();
         
         setStats([
-          { name: 'Total Tokens', value: summaryData.total_tokens.toLocaleString(), change: '', icon: Database, color: 'text-blue-400' },
-          { name: 'Estimated Cost', value: `$${summaryData.total_cost_usd.toFixed(4)}`, change: '', icon: DollarSign, color: 'text-emerald-400' },
-          { name: 'Cache Hit Rate', value: `${summaryData.cache_hit_rate.toFixed(1)}%`, change: '', icon: Zap, color: 'text-amber-400' },
-          { name: 'Avg Latency', value: `${summaryData.avg_latency_ms.toFixed(0)}ms`, change: '', icon: Activity, color: 'text-primary' },
+          { name: 'Total Tokens', value: (summaryData.total_tokens ?? 0).toLocaleString(), change: '', icon: Database, color: 'text-blue-400' },
+          { name: 'Estimated Cost', value: `$${(summaryData.total_cost_usd ?? 0).toFixed(4)}`, change: '', icon: DollarSign, color: 'text-emerald-400' },
+          { name: 'Cache Hit Rate', value: `${(summaryData.cache_hit_rate ?? 0).toFixed(1)}%`, change: '', icon: Zap, color: 'text-amber-400' },
+          { name: 'Avg Latency', value: `${(summaryData.avg_latency_ms ?? 0).toFixed(0)}ms`, change: '', icon: Activity, color: 'text-primary' },
         ]);
         
         setUsageData(timeSeriesData);
-        setProviderData(providerData);
+        setProviderData(providerJson);
 
       } catch (error) {
         console.error("Failed to fetch analytics:", error);
+        setError("Failed to load analytics data. Please check your connection.");
       } finally {
         setLoading(false);
       }
@@ -54,6 +61,19 @@ export default function AnalyticsDashboard() {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 text-lg mb-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="text-primary hover:underline text-sm">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

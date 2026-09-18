@@ -2,48 +2,46 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+from sqlalchemy import Integer
 
 from app.database.session import get_db
 from app.models.analytics import RoutingLog
 from app.models.registry import ModelRegistry
 from app.schemas.analytics import DashboardSummary, RoutingDistribution
-from app.services.auth import get_current_user
 
 router = APIRouter()
 
 @router.get("/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Returns high-level aggregate metrics for the dashboard.
+    Returns high-level aggregate metrics for the dashboard using SQL aggregates.
     """
-    # In a fully populated DB, we would run aggregate SUM/AVG queries here.
-    # For now, we will query and calculate them manually, falling back to 0 if no logs exist.
-    result = await db.execute(select(RoutingLog))
-    logs = result.scalars().all()
+    from sqlalchemy import func, case
     
-    if not logs:
-        return DashboardSummary(
-            total_requests=0,
-            cache_hit_rate=0.0,
-            avg_latency_ms=0.0,
-            total_cost_usd=0.0,
-            success_rate=1.0, # Default safe
-            total_tokens=0
-        )
-        
-    total_requests = len(logs)
-    cache_hits = sum(1 for log in logs if log.cache_hit)
-    total_latency = sum(log.latency_ms for log in logs)
-    total_cost = sum(log.estimated_cost for log in logs)
-    total_tokens = sum(log.total_tokens for log in logs)
-    fallbacks = sum(1 for log in logs if log.is_fallback)
+    stmt = select(
+        func.count(RoutingLog.id).label("total_requests"),
+        func.sum(func.cast(RoutingLog.cache_hit, Integer)).label("cache_hits"),
+        func.avg(RoutingLog.latency_ms).label("avg_latency_ms"),
+        func.sum(RoutingLog.estimated_cost).label("total_cost"),
+        func.sum(RoutingLog.total_tokens).label("total_tokens"),
+        func.sum(case((RoutingLog.is_fallback == True, 1), else_=0)).label("fallbacks"),
+    )
+    result = await db.execute(stmt)
+    row = result.one()
+    
+    total_requests = row.total_requests or 0
+    cache_hits = row.cache_hits or 0
+    total_latency = row.avg_latency_ms or 0.0
+    total_cost = row.total_cost or 0.0
+    total_tokens = row.total_tokens or 0
+    fallbacks = row.fallbacks or 0
     
     return DashboardSummary(
         total_requests=total_requests,
         cache_hit_rate=(cache_hits / total_requests) * 100 if total_requests > 0 else 0.0,
-        avg_latency_ms=total_latency / total_requests if total_requests > 0 else 0.0,
+        avg_latency_ms=total_latency if total_requests > 0 else 0.0,
         total_cost_usd=total_cost,
         success_rate=((total_requests - fallbacks) / total_requests) * 100 if total_requests > 0 else 100.0,
         total_tokens=total_tokens
@@ -51,7 +49,7 @@ async def get_dashboard_summary(
 
 @router.get("/routing-distribution", response_model=RoutingDistribution)
 async def get_routing_distribution(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Returns the count of requests routed to each specific model.
@@ -74,7 +72,9 @@ async def get_routing_distribution(
     return RoutingDistribution(distribution=distribution)
 
 @router.get("/cost-by-provider")
-async def get_cost_by_provider(db: AsyncSession = Depends(get_db)):
+async def get_cost_by_provider(
+    db: AsyncSession = Depends(get_db),
+):
     """
     Returns the total estimated cost grouped by AI provider.
     """
@@ -93,7 +93,9 @@ async def get_cost_by_provider(db: AsyncSession = Depends(get_db)):
     return data
 
 @router.get("/time-series")
-async def get_time_series(db: AsyncSession = Depends(get_db)):
+async def get_time_series(
+    db: AsyncSession = Depends(get_db),
+):
     """
     Returns the latest 20 routing logs formatted for a time-series chart.
     """

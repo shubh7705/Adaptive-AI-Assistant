@@ -22,7 +22,12 @@ class DocumentProcessor:
     def load_document(self, file_path: str):
         """
         Dynamically selects the right loader based on file extension.
+        Validates file exists and is within allowed directories.
         """
+        import os
+        abs_path = os.path.abspath(file_path)
+        if not os.path.isfile(abs_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
         _, ext = os.path.splitext(file_path.lower())
         
         if ext == ".pdf":

@@ -1,11 +1,16 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.config.settings import settings
 import os
+import logging
 
-# Fallback to SQLite for local development to ensure it's runnable out-of-the-box
-# In production / Docker, this will be the PostgreSQL URL
+logger = logging.getLogger(__name__)
+
 db_url = settings.DATABASE_URL
 if "postgresql" in db_url and not os.getenv("POSTGRES_READY"):
+    logger.warning(
+        "POSTGRES_READY env var not set. Falling back to SQLite for local development. "
+        "Set POSTGRES_READY=true in your environment or docker-compose.yml for PostgreSQL."
+    )
     db_url = "sqlite+aiosqlite:///./modelrouter.db"
     
 engine = create_async_engine(
@@ -22,6 +27,8 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
-async def get_db():
+from typing import AsyncGenerator
+
+async def get_db() -> AsyncGenerator:
     async with AsyncSessionLocal() as session:
         yield session

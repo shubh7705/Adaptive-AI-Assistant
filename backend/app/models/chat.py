@@ -3,9 +3,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime, timezone
 from app.database.base import Base
-
-def utcnow_naive():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.utils.time import utcnow_naive
 
 class Conversation(Base):
     __tablename__ = "conversations"

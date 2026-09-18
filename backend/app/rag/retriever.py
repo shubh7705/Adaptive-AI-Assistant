@@ -26,7 +26,7 @@ class RAGRetriever:
         Embeds chunks and adds them to the FAISS index.
         """
         if os.path.exists(self.index_path):
-            self.vector_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
+            self.vector_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=False)
             self.vector_store.add_documents(chunks)
         else:
             self.vector_store = FAISS.from_documents(chunks, self.embeddings)
@@ -40,7 +40,7 @@ class RAGRetriever:
         """
         if not self.vector_store:
             if os.path.exists(self.index_path):
-                self.vector_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
+                self.vector_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=False)
             else:
                 return "" # No documents ingested yet
                 

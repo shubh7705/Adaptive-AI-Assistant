@@ -19,6 +19,8 @@ def setup_logging():
     )
 
     # Add file handler for production auditing (Rotating logs)
+    import os
+    os.makedirs("logs", exist_ok=True)
     logger.add(
         "logs/modelrouter.log",
         rotation="10 MB",

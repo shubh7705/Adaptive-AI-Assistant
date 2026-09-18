@@ -39,5 +39,8 @@ Provide brief `feedback`.
             HumanMessage(content=human_content)
         ]
         
-        result = await self.structured_llm.ainvoke(messages)
-        return result
+        try:
+            result = await self.structured_llm.ainvoke(messages)
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Evaluation failed: {str(e)}")

@@ -1,13 +1,16 @@
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, CheckConstraint
 import uuid
 from datetime import datetime, timezone
 from app.database.base import Base
-
-def utcnow_naive():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.utils.time import utcnow_naive
 
 class ModelRegistry(Base):
     __tablename__ = "models"
+    __table_args__ = (
+        CheckConstraint("cost_per_1k_tokens >= 0", name="ck_models_non_negative_cost"),
+        CheckConstraint("context_window > 0", name="ck_models_positive_context_window"),
+        CheckConstraint("max_output_tokens > 0", name="ck_models_positive_max_output_tokens"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, unique=True, index=True, nullable=False)

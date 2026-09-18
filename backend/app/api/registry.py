@@ -22,7 +22,7 @@ async def get_all_models(db: AsyncSession = Depends(get_db)):
             {
                 "id": "mock-deepseek",
                 "name": "deepseek/deepseek-chat-v3-0324",
-                "provider": "OpenRouter",
+                "provider": "openrouter",
                 "description": "Optimized for programming, debugging, and code generation.",
                 "cost_per_1k_tokens": 0.002,
                 "supports_streaming": True,
@@ -38,7 +38,7 @@ async def get_all_models(db: AsyncSession = Depends(get_db)):
 @router.post("/", response_model=ModelRegistryResponse, status_code=status.HTTP_201_CREATED)
 async def add_model(
     model_data: ModelRegistryCreate, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     # Check if model already exists
     result = await db.execute(select(ModelRegistry).where(ModelRegistry.name == model_data.name))
@@ -65,3 +65,17 @@ async def add_model(
     await db.refresh(new_model)
     
     return new_model
+
+@router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_model(
+    model_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    model = result.scalars().first()
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    model.is_active = False
+    await db.commit()
+    return None
+

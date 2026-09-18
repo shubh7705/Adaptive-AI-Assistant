@@ -9,3 +9,4 @@ class ModelSelection(BaseModel):
     rationale: str
     runner_ups: List[Dict[str, Any]] = Field(default_factory=list)
     routing_metadata: Dict[str, Any] = Field(default_factory=dict)
+    trace: Dict[str, Dict[str, Any]] = Field(default_factory=dict)

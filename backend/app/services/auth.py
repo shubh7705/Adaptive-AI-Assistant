@@ -29,8 +29,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    # In a real app, you would fetch the user from the DB here using the email/ID in the token payload.
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -39,10 +40,33 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         email: str = payload.get("sub")
+        role: str = payload.get("role", "user")
         if email is None:
+            raise credentials_exception
+        # Enforce role from JWT but never allow escalation beyond what was originally issued
+        if role not in ("user", "admin"):
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
     
-    # Returning a mock user structure for now until Phase 8 (Database) is fully integrated.
-    return {"email": email, "role": payload.get("role", "user")}
+    return {"email": email, "role": role}
+
+def get_optional_current_user(token: Optional[str] = Depends(oauth2_scheme_optional)) -> dict:
+    if not token:
+        return {"email": "guest@local", "role": "user", "is_anonymous": True}
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        email: str = payload.get("sub", "guest@local")
+        role: str = payload.get("role", "user")
+        if email and role in ("user", "admin"):
+            return {"email": email, "role": role, "is_anonymous": False}
+    except Exception:
+        pass
+    return {"email": "guest@local", "role": "user", "is_anonymous": True}
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
+

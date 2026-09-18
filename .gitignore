@@ -42,6 +42,9 @@ logs/
 *.log
 *.sqlite
 *.sqlite3
+backend/data/
+data/
+chroma_intent_db/
 
 # IDEs and Editors
 .vscode/

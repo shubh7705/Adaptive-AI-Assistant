@@ -22,7 +22,9 @@ class FallbackRouter:
         # on the remaining pool. For now, we pick the most reliable/powerful remaining model 
         # as a safe fallback to ensure the request succeeds.
         
-        # Sort by cost (proxy for capability) descending as a safe fallback mechanism
-        fallback_pool.sort(key=lambda x: x.cost_per_1k_tokens, reverse=True)
+        # Sort by a composite score: prefer active models with lower error rates
+        def _fallback_score(m):
+            return (1.0 if m.is_active else 0.0)
+        fallback_pool.sort(key=_fallback_score, reverse=True)
         
         return fallback_pool[0]

@@ -26,9 +26,11 @@ def create_app() -> FastAPI:
         # Import models so they are registered with Base
         from app.models.registry import ModelRegistry
         from app.models.chat import Conversation, Message
+        from app.models.user import User
         from app.models.analytics import RoutingLog, ModelBenchmarks, ModelMetrics
         
         from sqlalchemy.future import select
+        from sqlalchemy import delete
         from app.database.session import AsyncSessionLocal
         
         async with engine.begin() as conn:
@@ -36,8 +38,37 @@ def create_app() -> FastAPI:
             
         # Seed the database with default and free models
         async with AsyncSessionLocal() as session:
+            # Purge removed models if they exist in the DB
+            removed_model_names = [
+                "llama-3.3-70b-versatile",
+                "openai/gpt-oss-120b:free",
+                "google/gemma-4-31b-it:free",
+                "llama-3.1-8b-instant",
+                "qwen/qwen3.6-27b",
+                "moonshotai/kimi-k2.6:free",
+                "nvidia/nemotron-3.5-lightning:free",
+            ]
+            removed_model_ids = [
+                "seed-llama-3-3-70b-groq",
+                "seed-gpt-oss-120b-openrouter",
+                "seed-gemma-4-31b-openrouter",
+                "seed-llama3-1-8b-groq",
+                "seed-qwen-3-6-27b-openrouter",
+                "seed-kimi-k2-6-openrouter",
+                "seed-nemotron-3-5-lightning-openrouter",
+            ]
+            await session.execute(
+                delete(ModelRegistry).where(
+                    (ModelRegistry.id.in_(removed_model_ids)) | (ModelRegistry.name.in_(removed_model_names))
+                )
+            )
+            await session.flush()
+
             result = await session.execute(select(ModelRegistry.id))
             existing_ids = {row for row in result.scalars().all()}
+            
+            result_names = await session.execute(select(ModelRegistry.name))
+            existing_names = {row for row in result_names.scalars().all()}
             
             models_to_seed = [
                 ModelRegistry(
@@ -45,7 +76,7 @@ def create_app() -> FastAPI:
                     name="gemini-2.5-flash",
                     provider="google",
                     description="Fast, cheap Google model for general queries.",
-                    cost_per_1k_tokens=0.0001,
+                    cost_per_1k_tokens=0.00015,
                     supports_streaming=True,
                     supports_tools=True,
                     is_active=True
@@ -55,58 +86,7 @@ def create_app() -> FastAPI:
                     name="deepseek/deepseek-chat",
                     provider="openrouter",
                     description="Powerful reasoning model for complex tasks.",
-                    cost_per_1k_tokens=0.02,
-                    supports_streaming=True,
-                    supports_tools=True,
-                    is_active=True
-                ),
-
-                ModelRegistry(
-                    id="seed-llama3-1-8b-groq",
-                    name="llama-3.1-8b-instant",
-                    provider="groq",
-                    description="Groq's highly efficient Llama 3.1 8B Instant model.",
-                    cost_per_1k_tokens=0.0,
-                    supports_streaming=True,
-                    supports_tools=True,
-                    is_active=True
-                ),
-                ModelRegistry(
-                    id="seed-llama-3-3-70b-groq",
-                    name="llama-3.3-70b-versatile",
-                    provider="groq",
-                    description="Highly versatile 70B model with blazing fast latency (~300 tk/s) on Groq.",
-                    cost_per_1k_tokens=0.0,
-                    supports_streaming=True,
-                    supports_tools=True,
-                    is_active=True
-                ),
-                ModelRegistry(
-                    id="seed-qwen-3-6-27b-openrouter",
-                    name="qwen/qwen3.6-27b",
-                    provider="openrouter",
-                    description="Qwen 3.6 27B model offering advanced reasoning on OpenRouter.",
-                    cost_per_1k_tokens=0.0,
-                    supports_streaming=True,
-                    supports_tools=True,
-                    is_active=True
-                ),
-                ModelRegistry(
-                    id="seed-gpt-oss-120b-openrouter",
-                    name="openai/gpt-oss-120b:free",
-                    provider="openrouter",
-                    description="OpenAI's massive 120B open-weight MoE model for advanced reasoning.",
-                    cost_per_1k_tokens=0.0,
-                    supports_streaming=True,
-                    supports_tools=True,
-                    is_active=True
-                ),
-                ModelRegistry(
-                    id="seed-gemma-4-31b-openrouter",
-                    name="google/gemma-4-31b-it:free",
-                    provider="openrouter",
-                    description="Google's Gemma 4 31B multimodal and coding powerhouse.",
-                    cost_per_1k_tokens=0.0,
+                    cost_per_1k_tokens=0.00028,
                     supports_streaming=True,
                     supports_tools=True,
                     is_active=True
@@ -116,25 +96,48 @@ def create_app() -> FastAPI:
                     name="nvidia/nemotron-3-super-120b-a12b:free",
                     provider="openrouter",
                     description="NVIDIA Nemotron 3 Super for orchestration and complex multi-agent tasks.",
-                    cost_per_1k_tokens=0.0,
+                    cost_per_1k_tokens=0.00080,
                     supports_streaming=True,
                     supports_tools=True,
                     is_active=True
                 ),
                 ModelRegistry(
-                    id="seed-kimi-k2-6-openrouter",
-                    name="moonshotai/kimi-k2.6:free",
+                    id="seed-ling-3-0-flash-vl-openrouter",
+                    name="inclusionai/ling-3.0-flash-vl:free",
                     provider="openrouter",
-                    description="Moonshot AI's Kimi K2.6 model.",
+                    description="InclusionAI Ling 3.0 Flash VL multimodal vision-language free model.",
                     cost_per_1k_tokens=0.0,
                     supports_streaming=True,
+                    supports_vision=True,
+                    supports_tools=True,
+                    is_active=True
+                ),
+                ModelRegistry(
+                    id="seed-laguna-s-2-1-openrouter",
+                    name="poolside/laguna-s-2.1:free",
+                    provider="openrouter",
+                    description="Poolside Laguna S 2.1 advanced coding and reasoning free model.",
+                    cost_per_1k_tokens=0.0,
+                    supports_streaming=True,
+                    supports_vision=False,
+                    supports_tools=True,
+                    is_active=True
+                ),
+                ModelRegistry(
+                    id="seed-ling-3-0-flash-fin-openrouter",
+                    name="inclusionai/ling-3.0-flash-fin:free",
+                    provider="openrouter",
+                    description="InclusionAI Ling 3.0 Flash Fin financial and analytical domain free model.",
+                    cost_per_1k_tokens=0.0,
+                    supports_streaming=True,
+                    supports_vision=False,
                     supports_tools=True,
                     is_active=True
                 )
             ]
             
             for m in models_to_seed:
-                if m.id not in existing_ids:
+                if m.id not in existing_ids and m.name not in existing_names:
                     session.add(m)
                     await session.flush()
                     
@@ -142,7 +145,7 @@ def create_app() -> FastAPI:
                     session.add(ModelBenchmarks(model_id=m.id))
                     session.add(ModelMetrics(model_id=m.id))
             
-            # Backfill existing models with benchmarks/metrics if they lack them
+            # Backfill existing models with benchmarks/metrics and non-zero pricing if needed
             result = await session.execute(select(ModelBenchmarks.model_id))
             existing_benchmark_ids = set(result.scalars().all())
             
@@ -156,6 +159,13 @@ def create_app() -> FastAPI:
                     session.add(ModelMetrics(model_id=m_id))
                     
             await session.commit()
+
+        # Preload Intent Classifier to eliminate first-request cold-start latency
+        try:
+            from app.agents.intent.agent import IntentAgent
+            IntentAgent()
+        except Exception as e:
+            logger.warning(f"Could not preload IntentAgent in lifespan: {e}")
 
         # Start the async outcome consumer background task.
         # It reads from Redis Streams and updates MetricsService + HistoryService
@@ -185,11 +195,9 @@ def create_app() -> FastAPI:
     # Instrument Prometheus Metrics
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-    # Configure CORS
-    # In production, replace `allow_origins=["*"]` with specific frontend domains.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

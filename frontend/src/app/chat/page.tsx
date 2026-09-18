@@ -2,14 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, Sparkles, Cpu, Settings2 } from 'lucide-react'
+import { Send, User, Sparkles, Cpu, Square } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+import { cn } from '@/lib/utils'
 
 interface Message {
   id: string
@@ -41,6 +36,26 @@ export default function ChatInterface() {
   const [selectedModelId, setSelectedModelId] = useState<string>("")
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const pendingContentRef = useRef<string>('')
+
+  const stopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsTyping(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (input.trim() && !isTyping) {
+        void handleSubmit(e)
+      }
+    }
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -50,57 +65,92 @@ export default function ChatInterface() {
     scrollToBottom()
   }, [messages])
   
+  const DEFAULT_MODELS: RegistryModel[] = [
+    {
+      id: "google/gemini-2.5-flash",
+      name: "Gemini 2.5 Flash",
+      provider: "google",
+      description: "Fast multimodal model for reasoning, writing, and general tasks.",
+    },
+    {
+      id: "deepseek/deepseek-chat",
+      name: "DeepSeek Chat",
+      provider: "openrouter",
+      description: "High-performance coding and complex reasoning assistant.",
+    },
+    {
+      id: "inclusionai/ling-3.0-flash-vl:free",
+      name: "Ling 3.0 Flash VL (Free)",
+      provider: "openrouter",
+      description: "Multimodal vision-language free model on OpenRouter.",
+    },
+  ]
+
   // Fetch available models on mount
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const apiHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-        const res = await fetch(`http://${apiHost}:8000/api/v1/registry/`, {
-          headers: {
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtb2RlbHJvdXRlci5haSIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTgxNDQxNTQzNX0.Sz_cxtjdtROdCIH7StnYN_rI70G0Blaxc0zaYgUu15k'
-          }
-        })
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        const headers: Record<string, string> = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        const res = await fetch(`${apiUrl}/api/v1/registry/`, { headers })
         if (res.ok) {
           const data = await res.json()
-          setAvailableModels(data)
-          if (data.length > 0) {
+          if (Array.isArray(data) && data.length > 0) {
+            setAvailableModels(data)
             setSelectedModelId(data[0].id)
+            return
           }
         }
+        setAvailableModels(DEFAULT_MODELS)
+        if (DEFAULT_MODELS.length > 0) {
+          setSelectedModelId(DEFAULT_MODELS[0].id)
+        }
       } catch (e) {
-        console.error("Failed to fetch models", e)
+        console.warn("Backend registry endpoint unreachable, using default models list:", e)
+        setAvailableModels(DEFAULT_MODELS)
+        if (DEFAULT_MODELS.length > 0) {
+          setSelectedModelId(DEFAULT_MODELS[0].id)
+        }
       }
     }
     fetchModels()
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     if (!input.trim() || isTyping) return
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input }
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: input }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setIsTyping(true)
 
+    abortControllerRef.current = new AbortController()
+
     // Setup the placeholder for the streaming response
-    const assistantId = (Date.now() + 1).toString()
+    const assistantId = crypto.randomUUID()
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', isStreaming: true }])
 
-    const payload: any = { query: input, session_id: 'ui_session' }
+    const payload: { query: string; session_id: string; manual_model_id?: string } = { query: input, session_id: 'ui_session' }
     if (!autoRouting && selectedModelId) {
       payload.manual_model_id = selectedModelId
     }
 
     try {
-      const apiHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-      const response = await fetch(`http://${apiHost}:8000/api/v1/chat/stream`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      const response = await fetch(`${apiUrl}/api/v1/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtb2RlbHJvdXRlci5haSIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTgxNDQxNTQzNX0.Sz_cxtjdtROdCIH7StnYN_rI70G0Blaxc0zaYgUu15k'
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: abortControllerRef.current.signal
       })
       
       if (!response.ok || !response.body) {
@@ -110,45 +160,63 @@ export default function ChatInterface() {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let currentContent = ''
+      let eventBuffer = ''
+
+      const processEvent = (event: string) => {
+        const dataLine = event.split('\n').find((line) => line.startsWith('data: '))
+        if (!dataLine) return
+        const data = dataLine.slice(6)
+        if (data === '[DONE]') return
+
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.model) {
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantId ? { ...msg, model: parsed.model } : msg
+            ))
+          }
+          if (parsed.token) {
+            currentContent += parsed.token
+            pendingContentRef.current = currentContent
+            if (!rafRef.current) {
+              rafRef.current = requestAnimationFrame(() => {
+                const content = pendingContentRef.current
+                setMessages(prev => prev.map(msg =>
+                  msg.id === assistantId ? { ...msg, content } : msg
+                ))
+                rafRef.current = null
+              })
+            }
+          }
+          if (parsed.error) {
+            currentContent += `\n\n**Error:** ${parsed.error}`
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantId ? { ...msg, content: currentContent } : msg
+            ))
+          }
+        } catch (error) {
+          console.error("SSE parse error", error, data)
+        }
+      }
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         
-        const chunk = decoder.decode(value, { stream: true })
-        // Process SSE lines (data: ...)
-        const lines = chunk.split('\n')
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.model) {
-                setMessages(prev => prev.map(msg => 
-                  msg.id === assistantId ? { ...msg, model: parsed.model } : msg
-                ))
-              }
-              if (parsed.token) {
-                currentContent += parsed.token
-                setMessages(prev => prev.map(msg => 
-                  msg.id === assistantId ? { ...msg, content: currentContent } : msg
-                ))
-              }
-              if (parsed.error) {
-                currentContent += `\n\n**Error:** ${parsed.error}`
-                setMessages(prev => prev.map(msg => 
-                  msg.id === assistantId ? { ...msg, content: currentContent } : msg
-                ))
-              }
-            } catch (e) {
-              console.error("SSE parse error", e, data)
-            }
-          }
+        eventBuffer += decoder.decode(value, { stream: true })
+        const events = eventBuffer.split('\n\n')
+        eventBuffer = events.pop() ?? ''
+        for (const event of events) {
+          processEvent(event)
         }
       }
-    } catch (error) {
+      eventBuffer += decoder.decode()
+      if (eventBuffer.trim()) processEvent(eventBuffer)
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log("Streaming stopped by user")
+        return
+      }
       setMessages(prev => prev.map(msg => 
         msg.id === assistantId ? { ...msg, content: 'Error connecting to ModelRouter AI API.' } : msg
       ))
@@ -187,7 +255,14 @@ export default function ChatInterface() {
           className="flex items-center gap-3"
         >
           {/* Toggle Auto Routing */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/20 border border-white/10 text-white cursor-pointer hover:bg-white/5 transition-colors" onClick={() => setAutoRouting(!autoRouting)}>
+          <button 
+            type="button"
+            role="switch"
+            aria-checked={autoRouting}
+            aria-label="Toggle auto-routing"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/20 border border-white/10 text-white cursor-pointer hover:bg-white/5 transition-colors" 
+            onClick={() => setAutoRouting(!autoRouting)}
+          >
             <div className={cn("w-8 h-4 rounded-full p-0.5 transition-colors", autoRouting ? "bg-primary" : "bg-white/20")}>
               <motion.div 
                 layout
@@ -197,11 +272,12 @@ export default function ChatInterface() {
               />
             </div>
             <span className="text-xs font-medium">{autoRouting ? 'Auto-Routing On' : 'Manual Mode'}</span>
-          </div>
+          </button>
           
           {/* Manual Model Selector */}
           {!autoRouting && (
             <select 
+              aria-label="Select model for manual routing" 
               value={selectedModelId}
               onChange={(e) => setSelectedModelId(e.target.value)}
               className="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-primary/50 w-48"
@@ -275,22 +351,35 @@ export default function ChatInterface() {
 
         {/* Input Area */}
         <div className="p-3 border-t border-white/10 bg-black/20">
-          <form onSubmit={handleSubmit} className="relative flex items-center">
-            <input
-              type="text"
+          <form onSubmit={handleSubmit} className="relative flex items-end">
+            <textarea
+              aria-label="Chat message input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Ask anything... ModelRouter will handle the rest."
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-12 py-3 text-[14.5px] text-white placeholder-white/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+              rows={Math.max(1, Math.min(5, input.split('\n').length))}
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-12 py-3 text-[14.5px] text-white placeholder-white/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all resize-none overflow-y-auto min-h-[48px] max-h-[150px]"
               disabled={isTyping}
             />
-            <button
-              type="submit"
-              disabled={!input.trim() || isTyping}
-              className="absolute right-2 p-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white rounded-lg transition-colors"
-            >
-              <Send className="h-5 w-5" />
-            </button>
+            {isTyping ? (
+              <button
+                type="button"
+                onClick={stopStreaming}
+                className="absolute right-2 bottom-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                title="Stop Generating"
+              >
+                <Square className="h-5 w-5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="absolute right-2 bottom-2 p-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white rounded-lg transition-colors"
+              >
+                <Send className="h-5 w-5" />
+              </button>
+            )}
           </form>
         </div>
       </motion.div>

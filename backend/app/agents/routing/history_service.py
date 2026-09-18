@@ -35,7 +35,8 @@ class RoutingHistoryService:
         except Exception:
             global _history_warned
             if not _history_warned:
-                print("Warning: Redis connection failed. Falling back to in-memory routing history.")
+                from app.config.logger import logger as loguru_logger
+                loguru_logger.warning("Redis connection failed. Falling back to in-memory routing history.")
                 _history_warned = True
 
             async with _fallback_lock:

@@ -2,52 +2,58 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Activity, Zap, Server, DollarSign, BrainCircuit, BarChart3, Loader2 } from 'lucide-react'
+import { Activity, Zap, Server, BrainCircuit, BarChart3, Loader2, type LucideIcon } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<Array<{ title: string; value: string; change: string; icon: LucideIcon; color: string }>>([]);
+  const [chartData, setChartData] = useState<Array<{ name: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const [summaryRes, distRes] = await Promise.all([
-          fetch(`${apiUrl}/api/v1/analytics/summary`),
-          fetch(`${apiUrl}/api/v1/analytics/routing-distribution`)
+          fetch(`${apiUrl}/api/v1/analytics/summary`, { headers }),
+          fetch(`${apiUrl}/api/v1/analytics/routing-distribution`, { headers })
         ]);
         
-        const summaryData = await summaryRes.json();
-        const distData = await distRes.json();
+        if (!summaryRes.ok || !distRes.ok) throw new Error('Analytics request failed')
+        const summaryData: { total_requests?: number; cache_hit_rate?: number; avg_latency_ms?: number; total_tokens?: number } = await summaryRes.json();
+        const distData: { distribution: Record<string, number> } = await distRes.json();
         
         // Map backend summary to frontend metric cards
         setMetrics([
           { 
             title: "Total Requests", 
-            value: summaryData.total_requests.toLocaleString(), 
+            value: (summaryData.total_requests ?? 0).toLocaleString(), 
             change: "", 
             icon: Activity, 
             color: "text-blue-400" 
           },
           { 
             title: "Cache Hit Rate", 
-            value: `${summaryData.cache_hit_rate.toFixed(1)}%`, 
+            value: `${(summaryData.cache_hit_rate ?? 0).toFixed(1)}%`, 
             change: "", 
             icon: Zap, 
             color: "text-yellow-400" 
           },
           { 
             title: "Avg Latency", 
-            value: `${summaryData.avg_latency_ms.toFixed(0)}ms`, 
+            value: `${(summaryData.avg_latency_ms ?? 0).toFixed(0)}ms`, 
             change: "", 
             icon: Server, 
             color: "text-emerald-400" 
           },
           { 
             title: "Total Tokens", 
-            value: summaryData.total_tokens.toLocaleString(), 
+            value: (summaryData.total_tokens ?? 0).toLocaleString(), 
             change: "", 
             icon: BrainCircuit, 
             color: "text-purple-400" 
@@ -63,6 +69,7 @@ export default function Dashboard() {
         setChartData(formattedChartData);
       } catch (error) {
         console.error("Failed to fetch analytics:", error);
+        setError("Failed to load analytics data. Please check your connection.");
       } finally {
         setLoading(false);
       }
@@ -77,6 +84,19 @@ export default function Dashboard() {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 text-lg mb-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="text-primary hover:underline text-sm">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

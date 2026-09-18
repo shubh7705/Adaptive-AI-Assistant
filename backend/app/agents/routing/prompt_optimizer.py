@@ -32,12 +32,16 @@ Return your optimized prompt and a list of changes you made.
         """
         Takes the original raw string and returns a structured PromptOptimization object.
         """
-        # If the prompt is already very long, we might not want to touch it to avoid messing up context.
-        # But for this implementation, we try to optimize it.
+        if len(original_prompt) > 32000:
+            raise ValueError("Prompt too long for optimization (max 32000 characters)")
+        
         messages = [
             self.system_prompt,
             HumanMessage(content=original_prompt)
         ]
         
-        result = await self.structured_llm.ainvoke(messages)
-        return result
+        try:
+            result = await self.structured_llm.ainvoke(messages)
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Prompt optimization failed: {str(e)}")

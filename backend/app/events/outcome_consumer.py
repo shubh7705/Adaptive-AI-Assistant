@@ -63,17 +63,16 @@ async def start_outcome_consumer() -> None:
     lifespan so it runs concurrently with the web server.
     """
     client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-
-    # Create consumer group (idempotent — raises if already exists)
-    try:
-        await client.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
-    except Exception:
-        pass  # Group already exists
-
-    logger.info(f"Outcome consumer started — reading from stream '{STREAM_KEY}'")
+    warned_disconnected = False
 
     while True:
         try:
+            # Create consumer group (idempotent — raises if already exists or fails if offline)
+            try:
+                await client.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
+            except Exception:
+                pass  # Group already exists or redis is currently unavailable
+
             results = await client.xreadgroup(
                 groupname=CONSUMER_GROUP,
                 consumername=CONSUMER_NAME,
@@ -81,6 +80,12 @@ async def start_outcome_consumer() -> None:
                 count=10,
                 block=BLOCK_MS,
             )
+
+            if warned_disconnected:
+                from app.config.logger import logger as loguru_logger
+                loguru_logger.info("Redis connection established. Outcome consumer active.")
+                warned_disconnected = False
+
             if not results:
                 continue
 
@@ -90,19 +95,27 @@ async def start_outcome_consumer() -> None:
                         await _process_event(data)
                         await client.xack(STREAM_KEY, CONSUMER_GROUP, msg_id)
                     except Exception as e:
-                        logger.error(f"Failed to process outcome event {msg_id}: {e}")
+                        from app.config.logger import logger as loguru_logger
+                        loguru_logger.error(f"Failed to process outcome event {msg_id}: {e}")
 
         except asyncio.CancelledError:
-            logger.info("Outcome consumer shutting down.")
+            from app.config.logger import logger as loguru_logger
+            loguru_logger.info("Outcome consumer shutting down.")
             break
         except Exception as e:
-            # redis.asyncio raises TimeoutError when block= expires with no messages.
-            # This is normal (the stream is simply empty) — suppress the log and loop.
             import redis as redis_lib
             if isinstance(e, redis_lib.exceptions.TimeoutError):
                 continue
-            # Any other exception is a real connectivity/infrastructure problem.
-            logger.error(f"Outcome consumer error: {e}. Retrying in 5s.")
-            await asyncio.sleep(5)
 
-    await client.aclose()
+            # Connection or socket errors when Redis is not running locally
+            if not warned_disconnected:
+                from app.config.logger import logger as loguru_logger
+                loguru_logger.warning("Redis is unreachable for outcome consumer. Standing by (falling back to in-memory processing)...")
+                warned_disconnected = True
+
+            await asyncio.sleep(10)
+
+    try:
+        await client.aclose()
+    except Exception:
+        pass

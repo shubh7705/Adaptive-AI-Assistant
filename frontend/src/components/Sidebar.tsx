@@ -4,12 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, MessageSquare, Database, Settings, Activity } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+import { cn } from '@/lib/utils'
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -33,7 +28,7 @@ export default function Sidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 space-y-2">
+      <nav className="flex-1 space-y-2" aria-label="Main navigation">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           return (

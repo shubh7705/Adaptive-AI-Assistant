@@ -2,9 +2,7 @@ from sqlalchemy import Column, String, Float, Boolean, Integer, ForeignKey, Date
 import uuid
 from datetime import datetime, timezone
 from app.database.base import Base
-
-def utcnow_naive():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.utils.time import utcnow_naive
 
 class RoutingLog(Base):
     __tablename__ = "routing_logs"

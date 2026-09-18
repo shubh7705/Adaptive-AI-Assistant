@@ -26,8 +26,10 @@ class SemanticCacheManager:
         """
         Injects the semantic cache into LangChain's global caching mechanism.
         """
+        from app.config.logger import logger as loguru_logger
+
         if not self.embeddings:
-            print("Warning: GOOGLE_API_KEY not set. Semantic cache disabled.")
+            loguru_logger.warning("GOOGLE_API_KEY not set. Semantic cache disabled.")
             return
 
         try:
@@ -41,12 +43,12 @@ class SemanticCacheManager:
                 r.ping()
                 # Redis is up, use Exact-Match Cache to avoid embedding model errors
                 set_llm_cache(RedisCache(redis_=r))
-                print("Exact-Match Cache initialized successfully with Redis.")
+                loguru_logger.info("Exact-Match Cache initialized successfully with Redis.")
             except redis.ConnectionError:
-                print("Warning: Redis is unreachable. Falling back to InMemoryCache.")
+                loguru_logger.warning("Redis is unreachable. Falling back to InMemoryCache.")
                 set_llm_cache(InMemoryCache())
         except Exception as e:
-            print(f"Warning: Failed to initialize Semantic Cache. Error: {e}")
+            loguru_logger.warning(f"Failed to initialize Semantic Cache. Error: {e}")
 
     # For manual caching outside of LangChain globals:
     async def check_cache(self, query: str) -> str | None:
