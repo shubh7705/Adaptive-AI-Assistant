@@ -1,199 +1,179 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { Activity, Zap, Server, BrainCircuit, BarChart3, Loader2, type LucideIcon } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState<Array<{ title: string; value: string; change: string; icon: LucideIcon; color: string }>>([]);
-  const [chartData, setChartData] = useState<Array<{ name: string; count: number }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<Array<{ title: string; value: string; change: string; icon: LucideIcon; color: string }>>([])
+  const [chartData, setChartData] = useState<Array<{ name: string; count: number }>>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
 
         const [summaryRes, distRes] = await Promise.all([
           fetch(`${apiUrl}/api/v1/analytics/summary`, { headers }),
           fetch(`${apiUrl}/api/v1/analytics/routing-distribution`, { headers })
-        ]);
-        
+        ])
+
         if (!summaryRes.ok || !distRes.ok) throw new Error('Analytics request failed')
-        const summaryData: { total_requests?: number; cache_hit_rate?: number; avg_latency_ms?: number; total_tokens?: number } = await summaryRes.json();
-        const distData: { distribution: Record<string, number> } = await distRes.json();
-        
-        // Map backend summary to frontend metric cards
+        const summaryData: { total_requests?: number; cache_hit_rate?: number; avg_latency_ms?: number; total_tokens?: number } = await summaryRes.json()
+        const distData: { distribution: Record<string, number> } = await distRes.json()
+
         setMetrics([
-          { 
-            title: "Total Requests", 
-            value: (summaryData.total_requests ?? 0).toLocaleString(), 
-            change: "", 
-            icon: Activity, 
-            color: "text-blue-400" 
+          {
+            title: "Total Requests",
+            value: (summaryData.total_requests ?? 0).toLocaleString(),
+            change: "",
+            icon: Activity,
+            color: "text-blue-400"
           },
-          { 
-            title: "Cache Hit Rate", 
-            value: `${(summaryData.cache_hit_rate ?? 0).toFixed(1)}%`, 
-            change: "", 
-            icon: Zap, 
-            color: "text-yellow-400" 
+          {
+            title: "Cache Hit Rate",
+            value: `${(summaryData.cache_hit_rate ?? 0).toFixed(1)}%`,
+            change: "",
+            icon: Zap,
+            color: "text-amber-400"
           },
-          { 
-            title: "Avg Latency", 
-            value: `${(summaryData.avg_latency_ms ?? 0).toFixed(0)}ms`, 
-            change: "", 
-            icon: Server, 
-            color: "text-emerald-400" 
+          {
+            title: "Avg Latency",
+            value: `${(summaryData.avg_latency_ms ?? 0).toFixed(0)}ms`,
+            change: "",
+            icon: Server,
+            color: "text-emerald-400"
           },
-          { 
-            title: "Total Tokens", 
-            value: (summaryData.total_tokens ?? 0).toLocaleString(), 
-            change: "", 
-            icon: BrainCircuit, 
-            color: "text-purple-400" 
+          {
+            title: "Total Tokens",
+            value: (summaryData.total_tokens ?? 0).toLocaleString(),
+            change: "",
+            icon: BrainCircuit,
+            color: "text-zinc-300"
           },
-        ]);
+        ])
 
-        // Map backend distribution to Recharts BarChart format
         const formattedChartData = Object.entries(distData.distribution).map(([name, count]) => ({
-          name: name.split('/').pop() || name, // simplify long model names
+          name: name.split('/').pop() || name,
           count: count
-        }));
-        
-        setChartData(formattedChartData);
-      } catch (error) {
-        console.error("Failed to fetch analytics:", error);
-        setError("Failed to load analytics data. Please check your connection.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchAnalytics();
-  }, []);
+        }))
 
-  const COLORS = ['#8b5cf6', '#3b82f6', '#ec4899', '#10b981', '#f59e0b'];
+        setChartData(formattedChartData)
+      } catch (err) {
+        console.error("Failed to fetch analytics:", err)
+        setError("Failed to load analytics data. Please check your connection.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnalytics()
+  }, [])
+
+  const CHART_COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#10b981', '#f59e0b']
 
   if (loading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div className="flex h-full w-full items-center justify-center min-h-[300px]">
+        <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
       </div>
-    );
+    )
   }
 
   if (error) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-400 text-lg mb-2">{error}</p>
-          <button onClick={() => window.location.reload()} className="text-primary hover:underline text-sm">
+      <div className="flex h-full w-full items-center justify-center min-h-[300px]">
+        <div className="text-center panel p-6 max-w-md">
+          <p className="text-red-400 text-sm mb-3">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors"
+          >
             Retry
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
-          <motion.h1 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold tracking-tight text-white mb-2"
-          >
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">
             System Overview
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-white/60"
-          >
-            Monitor real-time AI routing analytics and model performance.
-          </motion.p>
+          </h1>
+          <p className="text-sm text-zinc-400 mt-1">
+            Real-time routing analytics and model performance metrics.
+          </p>
         </div>
-        <motion.div 
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-sm font-medium">System Optimal</span>
-        </motion.div>
+        <div className="flex items-center gap-2 self-start sm:self-auto px-2.5 py-1 rounded-md bg-emerald-950/40 border border-emerald-800/50 text-emerald-400 text-xs font-medium">
+          <span className="w-1.5 h-1.5 rounded-sm bg-emerald-400" />
+          <span>System Operational</span>
+        </div>
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {metrics.map((metric, index) => (
-          <motion.div
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {metrics.map((metric) => (
+          <div
             key={metric.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="glass-panel p-6 rounded-2xl relative overflow-hidden group"
+            className="panel p-4 flex flex-col justify-between"
           >
-            <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors duration-500" />
-            
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <span className="text-sm font-medium text-white/60">{metric.title}</span>
-              <metric.icon className={`h-5 w-5 ${metric.color}`} />
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-zinc-400">{metric.title}</span>
+              <metric.icon className={`h-4 w-4 ${metric.color}`} />
             </div>
-            <div className="flex items-baseline gap-2 relative z-10">
-              <h2 className="text-3xl font-bold text-white">{metric.value}</h2>
+            <div>
+              <div className="text-2xl font-semibold tracking-tight text-zinc-100">{metric.value}</div>
               {metric.change && (
-                <span className="text-xs font-medium text-emerald-400">
+                <span className="text-xs font-medium text-emerald-400 mt-1 inline-block">
                   {metric.change}
                 </span>
               )}
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
       {/* Main Chart */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="glass-panel p-6 rounded-2xl h-[400px] flex flex-col"
-      >
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-primary/20 border border-primary/30">
-            <BarChart3 className="h-5 w-5 text-primary" />
-          </div>
-          <h3 className="text-lg font-semibold text-white">Routing Distribution</h3>
+      <div className="panel p-5 h-[380px] flex flex-col">
+        <div className="flex items-center gap-2.5 mb-5 pb-3 border-b border-zinc-800/80">
+          <BarChart3 className="h-4 w-4 text-blue-400" />
+          <h2 className="text-sm font-semibold text-zinc-100">Routing Distribution</h2>
         </div>
-        
+
         <div className="flex-1 w-full min-h-0">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
-              <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip 
-                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
-                itemStyle={{ color: 'white' }}
+            <BarChart data={chartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#27272a" vertical={false} />
+              <XAxis dataKey="name" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip
+                cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }}
+                contentStyle={{
+                  backgroundColor: '#18181b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  color: '#f4f4f5',
+                  fontSize: '12px'
+                }}
+                itemStyle={{ color: '#f4f4f5' }}
               />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

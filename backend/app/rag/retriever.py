@@ -7,7 +7,7 @@ class RAGRetriever:
     """
     Manages the FAISS Vector Database for Document Retrieval.
     """
-    def __init__(self, index_name: str = "modelrouter_faiss"):
+    def __init__(self, index_name: str = "adaptivechat_faiss"):
         self.index_name = index_name
         self.index_path = f"app/database/{self.index_name}"
         

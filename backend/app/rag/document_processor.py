@@ -3,7 +3,6 @@ from langchain_community.document_loaders import (
     TextLoader, 
     Docx2txtLoader, 
     CSVLoader,
-    UnstructuredMarkdownLoader
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
@@ -33,13 +32,13 @@ class DocumentProcessor:
         if ext == ".pdf":
             loader = PyPDFLoader(file_path)
         elif ext == ".txt":
-            loader = TextLoader(file_path)
+            loader = TextLoader(file_path, encoding="utf-8")
         elif ext == ".docx":
             loader = Docx2txtLoader(file_path)
         elif ext == ".csv":
             loader = CSVLoader(file_path)
         elif ext == ".md":
-            loader = UnstructuredMarkdownLoader(file_path)
+            loader = TextLoader(file_path, encoding="utf-8")
         else:
             raise ValueError(f"Unsupported file extension: {ext}")
             

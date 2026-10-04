@@ -1,6 +1,5 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
 import { Database, Plus, Eye, Key, CheckCircle2, XCircle, X, Loader2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -18,13 +17,11 @@ export default function ModelsRegistry() {
   const [models, setModels] = useState<Model[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  
-  // Add Modal State
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
-  
-  // Form State
+
   const [formData, setFormData] = useState({
     name: '',
     provider: 'openrouter',
@@ -38,7 +35,7 @@ export default function ModelsRegistry() {
     fetch(`${apiUrl}/api/v1/registry/`)
       .then(res => res.json())
       .then(data => {
-        setModels(data)
+        setModels(Array.isArray(data) ? data : [])
         setIsLoading(false)
       })
       .catch(err => {
@@ -57,7 +54,7 @@ export default function ModelsRegistry() {
     e.preventDefault()
     setIsAdding(true)
     setErrorMsg('')
-    
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/v1/registry/`, {
@@ -74,17 +71,16 @@ export default function ModelsRegistry() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Failed to add model')
       }
 
-      // Success
       setIsAddModalOpen(false)
       setFormData({
         name: '', provider: 'openrouter', cost_per_1k_tokens: 0, supports_vision: false, supports_tools: false
       })
-      fetchModels() // Refresh list
+      fetchModels()
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to add model')
     } finally {
@@ -94,239 +90,247 @@ export default function ModelsRegistry() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div className="flex h-full w-full items-center justify-center min-h-[300px]">
+        <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
       </div>
-    );
+    )
   }
 
   if (fetchError) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-400 text-lg mb-2">{fetchError}</p>
-          <button onClick={() => window.location.reload()} className="text-primary hover:underline text-sm">
+      <div className="flex h-full w-full items-center justify-center min-h-[300px]">
+        <div className="text-center panel p-6 max-w-md">
+          <p className="text-red-400 text-sm mb-3">{fetchError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors"
+          >
             Retry
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
-          <motion.h1 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold tracking-tight text-white mb-2"
-          >
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">
             Model Registry
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-white/60"
-          >
-            Manage active LLMs, API keys, and routing capabilities.
-          </motion.p>
+          </h1>
+          <p className="text-sm text-zinc-400 mt-1">
+            Active LLMs, provider configurations, and routing capabilities.
+          </p>
         </div>
-        <motion.button 
+        <button
           onClick={() => setIsAddModalOpen(true)}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium transition-colors shadow-[0_0_15px_rgba(252,128,255,0.3)]"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" />
           Add Model
-        </motion.button>
+        </button>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="glass-panel rounded-2xl overflow-hidden"
-      >
+      <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-white/80">
-            <thead className="text-xs uppercase bg-white/5 border-b border-white/10 text-white">
+          <table className="w-full text-xs text-left text-zinc-300">
+            <thead className="text-[11px] uppercase tracking-wider bg-zinc-900 border-b border-zinc-800 text-zinc-400 font-medium">
               <tr>
-                <th scope="col" className="px-6 py-4">Model Name</th>
-                <th scope="col" className="px-6 py-4">Provider</th>
-                <th scope="col" className="px-6 py-4">Cost / 1k (USD)</th>
-                <th scope="col" className="px-6 py-4 text-center">Tools</th>
-                <th scope="col" className="px-6 py-4 text-center">Vision</th>
-                <th scope="col" className="px-6 py-4">Status</th>
-                <th scope="col" className="px-6 py-4 text-right">Actions</th>
+                <th scope="col" className="px-5 py-3">Model Name</th>
+                <th scope="col" className="px-5 py-3">Provider</th>
+                <th scope="col" className="px-5 py-3">Cost / 1k Tokens</th>
+                <th scope="col" className="px-5 py-3 text-center">Tools</th>
+                <th scope="col" className="px-5 py-3 text-center">Vision</th>
+                <th scope="col" className="px-5 py-3">Status</th>
+                <th scope="col" className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
-              {models.map((model, idx) => (
-                <motion.tr 
+            <tbody className="divide-y divide-zinc-800/80">
+              {models.map((model) => (
+                <tr
                   key={model.name}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + (idx * 0.05) }}
-                  className="hover:bg-white/5 transition-colors group"
+                  className="hover:bg-zinc-900/50 transition-colors"
                 >
-                  <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
-                    <div className="p-1.5 bg-white/10 rounded-md group-hover:bg-primary/20 group-hover:text-primary transition-colors">
-                      <Database className="h-4 w-4" />
+                  <td className="px-5 py-3 font-medium text-zinc-100 flex items-center gap-2.5">
+                    <div className="p-1 bg-zinc-800 rounded text-zinc-400">
+                      <Database className="h-3.5 w-3.5" />
                     </div>
-                    {model.name}
+                    <span>{model.name}</span>
                   </td>
-                  <td className="px-6 py-4 capitalize">{model.provider}</td>
-                  <td className="px-6 py-4">${model.cost_per_1k_tokens.toFixed(4)}</td>
-                  <td className="px-6 py-4 text-center">
-                    {model.supports_tools ? <CheckCircle2 className="h-4 w-4 text-emerald-400 mx-auto" /> : <XCircle className="h-4 w-4 text-red-400/50 mx-auto" />}
+                  <td className="px-5 py-3 capitalize text-zinc-300">{model.provider}</td>
+                  <td className="px-5 py-3 text-zinc-300">${model.cost_per_1k_tokens.toFixed(4)}</td>
+                  <td className="px-5 py-3 text-center">
+                    {model.supports_tools ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mx-auto" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-zinc-600 mx-auto" />
+                    )}
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    {model.supports_vision ? <CheckCircle2 className="h-4 w-4 text-emerald-400 mx-auto" /> : <XCircle className="h-4 w-4 text-red-400/50 mx-auto" />}
+                  <td className="px-5 py-3 text-center">
+                    {model.supports_vision ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mx-auto" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-zinc-600 mx-auto" />
+                    )}
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${model.is_active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
+                  <td className="px-5 py-3">
+                    <span className={`px-2 py-0.5 text-[11px] font-medium rounded border ${
+                      model.is_active
+                        ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-400'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}>
                       {model.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors" aria-label="Manage API key">
-                        <Key className="h-4 w-4" />
+                  <td className="px-5 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
+                        aria-label="Manage API key"
+                        title="Manage Key"
+                      >
+                        <Key className="h-3.5 w-3.5" />
                       </button>
-                      <button className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors" aria-label="View model details">
-                        <Eye className="h-4 w-4" />
+                      <button
+                        className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
+                        aria-label="View model details"
+                        title="View Details"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
-                </motion.tr>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </motion.div>
+      </div>
 
       {/* Add Model Modal */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-model-title"
-            onKeyDown={(e) => { if (e.key === 'Escape') setIsAddModalOpen(false) }}
-          >
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/10"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 id="add-model-title" className="text-xl font-semibold text-white">Add New Model</h2>
-                <button onClick={() => setIsAddModalOpen(false)} aria-label="Close modal" className="text-white/50 hover:text-white transition-colors">
-                  <X className="h-5 w-5" />
-                </button>
+      {isAddModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-model-title"
+          onKeyDown={(e) => { if (e.key === 'Escape') setIsAddModalOpen(false) }}
+        >
+          <div className="panel w-full max-w-md p-5 bg-[#141416] border border-zinc-700 shadow-xl">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
+              <h2 id="add-model-title" className="text-base font-semibold text-zinc-100">
+                Add Model to Registry
+              </h2>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                aria-label="Close modal"
+                className="text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddModel} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Model ID / Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. meta-llama/llama-3-8b-instruct"
+                  className="w-full panel-input px-3 py-2 text-xs"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                />
+                <p className="text-[11px] text-zinc-500 mt-1">Exact model identifier accepted by the provider.</p>
               </div>
 
-              <form onSubmit={handleAddModel} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">Model ID / Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g., meta-llama/llama-3-8b-instruct"
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Provider
+                </label>
+                <select
+                  className="w-full panel-input px-3 py-2 text-xs"
+                  value={formData.provider}
+                  onChange={(e) => setFormData({...formData, provider: e.target.value})}
+                >
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="groq">Groq</option>
+                  <option value="google">Google</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Cost per 1k Tokens (USD)
+                </label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  required
+                  className="w-full panel-input px-3 py-2 text-xs"
+                  value={formData.cost_per_1k_tokens}
+                  onChange={(e) => setFormData({...formData, cost_per_1k_tokens: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+
+              <div className="flex gap-6 pt-1">
+                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-zinc-700 bg-zinc-900 text-blue-600 focus:ring-blue-500"
+                    checked={formData.supports_vision}
+                    onChange={(e) => setFormData({...formData, supports_vision: e.target.checked})}
                   />
-                  <p className="text-xs text-white/40 mt-1">The exact model ID used by the provider API.</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">Provider</label>
-                  <select 
-                    className="w-full bg-[#111111] border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-primary/50 transition-all"
-                    value={formData.provider}
-                    onChange={(e) => setFormData({...formData, provider: e.target.value})}
-                  >
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="groq">Groq</option>
-                    <option value="google">Google</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">Cost per 1k Tokens (USD)</label>
-                  <input 
-                    type="number" 
-                    step="0.0001"
-                    min="0"
-                    required
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                    value={formData.cost_per_1k_tokens}
-                    onChange={(e) => setFormData({...formData, cost_per_1k_tokens: parseFloat(e.target.value) || 0})}
+                  <span>Supports Vision</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-zinc-700 bg-zinc-900 text-blue-600 focus:ring-blue-500"
+                    checked={formData.supports_tools}
+                    onChange={(e) => setFormData({...formData, supports_tools: e.target.checked})}
                   />
-                </div>
+                  <span>Supports Tools</span>
+                </label>
+              </div>
 
-                <div className="flex gap-6 pt-2">
-                  <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="rounded border-white/20 bg-black/40 text-primary focus:ring-primary/50"
-                      checked={formData.supports_vision}
-                      onChange={(e) => setFormData({...formData, supports_vision: e.target.checked})}
-                    />
-                    Supports Vision
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="rounded border-white/20 bg-black/40 text-primary focus:ring-primary/50"
-                      checked={formData.supports_tools}
-                      onChange={(e) => setFormData({...formData, supports_tools: e.target.checked})}
-                    />
-                    Supports Tools
-                  </label>
+              {errorMsg && (
+                <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded text-red-400 text-xs">
+                  {errorMsg}
                 </div>
+              )}
 
-                {errorMsg && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-                    {errorMsg}
-                  </div>
-                )}
-
-                <div className="pt-4 flex gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="flex-1 px-4 py-2.5 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    disabled={isAdding}
-                    className="flex-1 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium transition-colors shadow-[0_0_15px_rgba(252,128,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-                  >
-                    {isAdding ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Validating...
-                      </>
-                    ) : (
-                      'Verify & Add'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+              <div className="pt-3 flex gap-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="flex-1 px-3 py-2 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdding}
+                  className="flex-1 px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-1.5"
+                >
+                  {isAdding ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Validating...</span>
+                    </>
+                  ) : (
+                    'Save Model'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   )
 }

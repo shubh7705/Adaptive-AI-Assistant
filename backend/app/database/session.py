@@ -11,7 +11,7 @@ if "postgresql" in db_url and not os.getenv("POSTGRES_READY"):
         "POSTGRES_READY env var not set. Falling back to SQLite for local development. "
         "Set POSTGRES_READY=true in your environment or docker-compose.yml for PostgreSQL."
     )
-    db_url = "sqlite+aiosqlite:///./modelrouter.db"
+    db_url = "sqlite+aiosqlite:///./adaptivechat.db"
     
 engine = create_async_engine(
     db_url,

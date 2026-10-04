@@ -6,8 +6,8 @@ import Sidebar from "@/components/Sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ModelRouter AI Dashboard",
-  description: "Intelligent Multi-Model AI Router Dashboard",
+  title: "Adaptive Chat AI Dashboard",
+  description: "Intelligent Multi-Model Adaptive Chat AI Dashboard",
 };
 
 export default function RootLayout({

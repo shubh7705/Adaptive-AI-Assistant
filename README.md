@@ -1,71 +1,63 @@
-# ModelRouter AI (Adaptive AI Assistant)
+# Adaptive Chat AI
 
-ModelRouter AI is an intelligent, production-ready Multi-Model AI Router. Instead of sending every request to a single LLM, it acts as an **AI Operating System**, automatically detecting user intent, optimizing prompts, evaluating costs, and routing the request to the best possible model while maximizing quality and minimizing latency.
-
----
-
-## 🌟 Key Features
-
-- **Intent Detection Agent**: Analyzes prompts to detect the task (math, coding, creative) and complexity.
-- **Cost Optimization Agent**: Uses local tokenization (`tiktoken`) to calculate budgets and prevent expensive models from being wasted on simple queries.
-- **Model Selection Agent**: Dynamically scores and selects the best model from the active registry based on `Score = Quality + Latency + Cost + Availability`.
-- **Live Analytics Dashboard**: Real-time Next.js visualizations (using Recharts) for token usage over time, cache-hit rates, and estimated cost distribution grouped by AI provider.
-- **Real-Time Intent Logging**: Automatically logs user queries and detected intent tasks directly to a CSV file (`chat_intents.csv`) for offline dataset generation and training.
-- **Exact-Match Redis Caching**: Intercepts identical user queries before they hit external provider APIs, serving them instantly from Redis to guarantee <50ms latency and zero API cost.
-- **Prompt Optimization Agent**: Automatically rewrites poor prompts for better generation.
-- **Tool Calling Framework**: Equips LLMs with calculators, web search, and Python executors.
-- **RAG Pipeline**: Native FAISS integration to chat with your PDFs, Word documents, and Markdown files.
-- **Quality Evaluation Gate**: Grades AI responses for accuracy and hallucination before returning them to the user.
-- **Fallback Router**: Instantly retries with a secondary model if the primary model fails or hallucinates.
+Adaptive Chat AI is a multi-model router and chat interface. It detects user intent, estimates token budgets, and selects the most suitable model from an active registry based on quality, latency, and cost.
 
 ---
 
-## 🏗️ Architecture Stack
+## Key Features
 
-- **Orchestration**: LangGraph, LangChain
-- **Backend API**: FastAPI (Python 3.12), AsyncIO
-- **Database**: PostgreSQL (SQLAlchemy ORM)
+- **Intent Detection Agent**: Analyzes prompts using a hybrid architecture (Laya System 1 fast classifier with ChromaDB semantic anchor fallback) to determine task type and complexity.
+- **Cost Optimization Agent**: Uses local tokenization (`tiktoken`) to calculate budgets and prevent oversized models from handling simple requests.
+- **Model Selection Agent**: Scores and selects models dynamically based on quality, latency, cost, and availability.
+- **Live Analytics Dashboard**: Visualizations for token usage over time, cache hit rates, and estimated cost distribution grouped by AI provider.
+- **Real-Time Intent Logging**: Logs user queries and detected intent tasks directly to a CSV file (`chat_intents.csv`) for offline dataset generation and evaluation.
+- **Exact-Match Redis Caching**: Intercepts repeated queries before hitting provider APIs to return cached responses with low latency and zero API cost.
+- **Prompt Optimization Agent**: Refines vague prompts for clearer model execution.
+- **Tool Calling Framework**: Supports calculator, web search, and Python code execution tools.
+- **RAG Pipeline**: FAISS integration for document search across PDFs, Word documents, and text files.
+- **Fallback Router**: Retries with a secondary candidate if the primary model fails.
+
+---
+
+## Architecture Stack
+
+- **Backend API**: FastAPI (Python 3.11/3.12), AsyncIO
+- **Database**: PostgreSQL (SQLAlchemy ORM) with automatic SQLite fallback for local development
 - **Short-Term Memory & Cache**: Redis
-- **Frontend Dashboard**: Next.js 14, TypeScript, TailwindCSS, shadcn/ui
+- **Embedding & Search**: ChromaDB, FAISS
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
 - **Observability**: Prometheus, Loguru
 
 ---
 
-## 🗺️ System Workflow
+## System Workflow
 
 ```mermaid
 graph TD
-    %% Styling
-    classDef frontend fill:#3b82f6,stroke:#1e40af,stroke-width:2px,color:#fff
-    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
-    classDef database fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
-    classDef external fill:#8b5cf6,stroke:#5b21b6,stroke-width:2px,color:#fff
-    classDef cache fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff
-
     %% Nodes
     User(("User"))
-    UI["Next.js Frontend UI"]:::frontend
-    Dashboard["Next.js Analytics Dashboard"]:::frontend
+    UI["Next.js Frontend UI"]
+    Dashboard["Next.js Analytics Dashboard"]
     
-    API["FastAPI /stream Endpoint"]:::backend
-    RedisCache[("Redis Exact-Match Cache")]:::cache
-    IntentAgent["Intent Agent (Gemini Flash)"]:::backend
-    ModelSelector["Model Selection Agent"]:::backend
-    StreamingService["Streaming Service"]:::backend
-    CSVLogger["CSV Intent Logger"]:::backend
+    API["FastAPI /stream Endpoint"]
+    RedisCache[("Redis Cache")]
+    IntentAgent["Intent Agent"]
+    ModelSelector["Model Selection Agent"]
+    StreamingService["Streaming Service"]
+    CSVLogger["CSV Intent Logger"]
     
-    PostgreSQL[("PostgreSQL DB")]:::database
+    PostgreSQL[("PostgreSQL / SQLite")]
     
-    Providers{"External LLMs (Google, OpenRouter, Groq)"}:::external
+    Providers{"External LLMs"}
 
     %% Edges
     User -- "1. Sends Query" --> UI
     UI -- "2. POST /api/v1/chat/stream" --> API
     
     API -- "3. Check Cache" --> RedisCache
-    RedisCache -. "Cache Hit (Skip LLM)" .-> UI
+    RedisCache -. "Cache Hit" .-> UI
     
-    API -- "4. Cache Miss (Analyze Intent)" --> IntentAgent
+    API -- "4. Cache Miss" --> IntentAgent
     IntentAgent -- "Determines Complexity & Task" --> ModelSelector
     
     ModelSelector -- "5. Fetch Active Models" --> PostgreSQL
@@ -89,42 +81,39 @@ graph TD
 
 ---
 
-## 🚀 Quickstart (Docker)
+## Quickstart (Docker)
 
-The easiest way to run ModelRouter AI is using Docker Compose.
+The fastest way to run the full stack is using Docker Compose.
 
 1. **Set your API Keys**
    Create a `.env` file in the root directory:
    ```env
    GOOGLE_API_KEY=your_gemini_api_key_here
-   DEEPSEEK_API_KEY=your_deepseek_api_key_here
+   OPENROUTER_API_KEY=your_openrouter_api_key_here
    JWT_SECRET_KEY=generate_a_secure_random_string
    ```
 
-2. **Boot the System**
+2. **Start the containers**
    ```bash
    docker compose up -d --build
    ```
 
-3. **Access the Services**
-   - **Frontend UI**: http://localhost:3000
-   - **Backend API Docs**: http://localhost:8000/docs
-   - **Prometheus Metrics**: http://localhost:8000/metrics
+3. **Access the services**
+   - Frontend UI: http://localhost:3000
+   - Backend API Docs: http://localhost:8000/docs
+   - Prometheus Metrics: http://localhost:8000/metrics
 
 ---
 
-## 💻 Local Development (Without Docker)
+## Local Development (Without Docker)
 
 ### 1. Backend Setup
 ```bash
-# We use `uv` for lightning-fast dependency resolution
-pip install uv
-
-# Install dependencies
-uv pip install -r pyproject.toml
+# Install dependencies using uv
+uv sync
 
 # Run the API
-python scripts/run_backend.py
+powershell scripts/run_backend.ps1
 ```
 
 ### 2. Frontend Setup
@@ -136,31 +125,26 @@ npm run dev
 
 ---
 
-## 📡 API Reference
-
-You can use ModelRouter AI exactly like the OpenAI API in your own external applications.
+## API Reference
 
 ### Chat Streaming Endpoint
 ```bash
 curl -X POST "http://localhost:8000/api/v1/chat/stream" \
-     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{
-           "query": "Write a python script to scrape a website.",
+           "query": "Write a python script to parse a CSV file.",
            "session_id": "user_session_123"
          }'
 ```
-*Returns Server-Sent Events (SSE) token-by-token.*
 
-### Register a New Model
+### Register a Model
 ```bash
 curl -X POST "http://localhost:8000/api/v1/registry/" \
-     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{
-           "name": "gpt-4o",
-           "provider": "openai",
-           "cost_per_1k_tokens": 0.01,
+           "name": "google/gemini-2.5-flash",
+           "provider": "google",
+           "cost_per_1k_tokens": 0.00015,
            "supports_vision": true,
            "supports_tools": true
          }'
@@ -168,6 +152,6 @@ curl -X POST "http://localhost:8000/api/v1/registry/" \
 
 ---
 
-## 🛡️ License
+## License
 
 MIT License

@@ -3,24 +3,24 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: modelrouter_postgres
+    container_name: adaptivechat_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-modelrouter}
+      POSTGRES_DB: ${POSTGRES_DB:-adaptivechat}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d modelrouter"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d adaptivechat"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis/redis-stack-server:latest # Includes RediSearch for Semantic Caching
-    container_name: modelrouter_redis
+    container_name: adaptivechat_redis
     ports:
       - "6379:6379"
     volumes:
@@ -35,11 +35,11 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: modelrouter_backend
+    container_name: adaptivechat_backend
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-modelrouter}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-adaptivechat}
       - REDIS_URL=redis://redis:6379/0
       - POSTGRES_READY=true
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
@@ -55,7 +55,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: modelrouter_frontend
+    container_name: adaptivechat_frontend
     ports:
       - "3000:3000"
     environment:

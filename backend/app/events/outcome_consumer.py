@@ -1,5 +1,5 @@
 """
-Outcome Consumer — Change 8 (Phase 2)
+Outcome Consumer: Change 8 (Phase 2)
 
 Background worker that reads from the Redis Stream 'routing:outcomes' and
 calls MetricsService and RoutingHistoryService asynchronously, fully decoupled
@@ -40,7 +40,7 @@ async def _process_event(data: dict) -> None:
     success = data.get("success") == "1"
     tokens_per_sec = float(data.get("tokens_per_sec", 0.0))
 
-    # 1. Update diversity history (scoped by task_type — Change 9)
+    # 1. Update diversity history (scoped by task_type, Change 9)
     history_service = RoutingHistoryService()
     await history_service.record_selection(model_id, task_type=task_type)
 
@@ -67,7 +67,7 @@ async def start_outcome_consumer() -> None:
 
     while True:
         try:
-            # Create consumer group (idempotent — raises if already exists or fails if offline)
+            # Create consumer group (idempotent: raises if already exists or fails if offline)
             try:
                 await client.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
             except Exception:

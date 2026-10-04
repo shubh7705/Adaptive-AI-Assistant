@@ -4,19 +4,19 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # App Config
-    APP_NAME: str = "ModelRouter AI"
+    APP_NAME: str = "Adaptive Chat AI"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
     # Database (PostgreSQL)
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/modelrouter"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/adaptivechat"
 
     # Redis (Caching and Memory)
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # JWT Authentication
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = "default_secret_key"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     CORS_ORIGINS: list[str] = [
@@ -38,13 +38,18 @@ class Settings(BaseSettings):
     # LangChain / LangGraph tracing (Optional)
     LANGCHAIN_TRACING_V2: str = "false"
     LANGCHAIN_API_KEY: Optional[str] = None
-    LANGCHAIN_PROJECT: str = "ModelRouterAI"
+    LANGCHAIN_PROJECT: str = "AdaptiveChatAI"
 
     # Routing engine tuning
     ROUTING_CACHE_TTL_SECONDS: int = 10        # How long benchmark/metric feature data is cached
     CIRCUIT_BREAKER_ERROR_THRESHOLD: float = 0.20  # Models above this error_rate are excluded
     BANDIT_EPSILON: float = 0.10               # Exploration rate for epsilon-greedy candidate ranker
     MIN_PASSWORD_LENGTH: int = 8
+
+    # Laya System 1 Decision Model configuration
+    LAYA_ENABLED: bool = True
+    LAYA_CONFIDENCE_THRESHOLD: float = 0.70    # Confidence cutoff below which embedding anchors are used
+    LAYA_MODEL_NAME: str = "convaiinnovations/laya"
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),

@@ -9,6 +9,8 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from app.schemas.intent import IntentClassification
 from app.config.logger import logger
+from app.config.settings import settings
+from app.agents.intent.laya_service import LayaService
 
 # ---------------------------------------------------------------------------
 # Static Metadata Map for Semantic Categories
@@ -37,7 +39,7 @@ INTENT_METADATA_MAP = {
     "unknown": {"complexity": "medium", "requires_tools": False, "recommended_tier": "fast"},
 }
 
-# Pre-defined semantic anchors (fallback) — used only if the dataset file is
+# Pre-defined semantic anchors (fallback): used only if the dataset file is
 # missing or unreadable. Multiple phrasings per class give a more robust
 # centroid than a single example sentence.
 FALLBACK_ANCHORS = [
@@ -69,7 +71,7 @@ FALLBACK_ANCHORS = [
 ]
 
 # Below this cosine-similarity threshold, the top match is considered too
-# uncertain to trust — the agent falls back to "unknown" rather than
+# uncertain to trust: the agent falls back to "unknown" rather than
 # confidently misrouting the query.
 CONFIDENCE_THRESHOLD = 0.45
 TOP_K = 5
@@ -78,8 +80,14 @@ TOP_K = 5
 class IntentAgent:
     """
     Agent responsible for analyzing the intent, complexity, and tool requirements
-    of a user query. Uses a persistent, disk-backed Semantic Anchor Search
-    (ChromaDB + cosine similarity) with top-k voting for robustness.
+    of a user query.
+
+    Hybrid Architecture:
+    1. Primary: Convai Innovations' Laya System 1 non-autoregressive decision model
+       for rapid, direct intent classification.
+    2. Fallback: ChromaDB persistent vector database with top-k cosine similarity
+       anchor voting if Laya confidence is below settings.LAYA_CONFIDENCE_THRESHOLD,
+       if Laya returns 'unknown', or if Laya is disabled/encounters an error.
     """
     _instance = None
     _init_lock = threading.Lock()
@@ -87,6 +95,7 @@ class IntentAgent:
     _chroma_client = None
     _collection = None
     _model = None
+    _laya_service = None
 
     def __new__(cls):
         # Double-checked locking so concurrent first-callers can't race to
@@ -96,7 +105,15 @@ class IntentAgent:
                 if cls._instance is None:
                     cls._instance = super(IntentAgent, cls).__new__(cls)
                     cls._instance._initialize_chroma()
+                    cls._instance._initialize_laya()
         return cls._instance
+
+    def _initialize_laya(self):
+        try:
+            self._laya_service = LayaService()
+        except Exception as e:
+            logger.warning(f"Could not initialize LayaService: {e}. Will rely on ChromaDB anchors.")
+            self._laya_service = None
 
     def _initialize_chroma(self):
         logger.info("Initializing Semantic Anchor Search (ChromaDB)...")
@@ -153,11 +170,65 @@ class IntentAgent:
             logger.info(f"ChromaDB persistent vector database loaded instantly with {existing_count} cached embeddings.")
 
     async def execute(self, query: str) -> IntentClassification:
+        """
+        Executes intent detection using Laya System 1 model with ChromaDB fallback.
+        """
+        # --- Stage 1: Try Laya System 1 Decision Model ---
+        if settings.LAYA_ENABLED and self._laya_service and self._laya_service.is_available:
+            try:
+                laya_result = await asyncio.to_thread(self._laya_service.predict, query)
+                if laya_result:
+                    task = laya_result.get("task", "unknown")
+                    confidence = laya_result.get("confidence", 0.0)
+
+                    if task != "unknown" and confidence >= settings.LAYA_CONFIDENCE_THRESHOLD:
+                        metadata = INTENT_METADATA_MAP.get(task, INTENT_METADATA_MAP["unknown"])
+
+                        complexity = laya_result.get("complexity")
+                        if complexity not in ("low", "medium", "high"):
+                            complexity = metadata["complexity"]
+
+                        requires_tools = laya_result.get("requires_tools")
+                        if requires_tools is None:
+                            requires_tools = metadata["requires_tools"]
+
+                        recommended_tier = metadata["recommended_tier"]
+                        if complexity == "high":
+                            recommended_tier = "powerful"
+
+                        rationale = (
+                            f"Laya System 1 classified query as '{task}' with confidence {confidence:.2f} "
+                            f"(threshold: {settings.LAYA_CONFIDENCE_THRESHOLD:.2f})."
+                        )
+
+                        return IntentClassification(
+                            task=task,
+                            confidence=confidence,
+                            complexity=complexity,
+                            requires_tools=requires_tools,
+                            recommended_tier=recommended_tier,
+                            rationale=rationale,
+                        )
+                    else:
+                        reason = (
+                            f"Laya confidence {confidence:.2f} < threshold {settings.LAYA_CONFIDENCE_THRESHOLD:.2f}"
+                            if task != "unknown"
+                            else "Laya returned 'unknown'"
+                        )
+                        logger.info(f"{reason}. Falling back to ChromaDB anchor search.")
+                        return await self._execute_chroma_fallback(query, fallback_reason=reason)
+            except Exception as e:
+                logger.warning(f"Laya classification failed with error: {e}. Falling back to ChromaDB.")
+                return await self._execute_chroma_fallback(query, fallback_reason=f"Laya error: {e}")
+
+        # --- Stage 2: ChromaDB Fallback / Standalone ---
+        return await self._execute_chroma_fallback(query)
+
+    async def _execute_chroma_fallback(self, query: str, fallback_reason: str | None = None) -> IntentClassification:
+        """
+        Executes semantic anchor search using ChromaDB and top-k voting.
+        """
         try:
-            # Both encode() and collection.query() are synchronous, CPU-bound
-            # calls. Running them directly inside this async method would
-            # block the event loop for every other concurrent request, so
-            # they're offloaded to a worker thread.
             query_embedding = await asyncio.to_thread(
                 lambda: self._model.encode([query]).tolist()
             )
@@ -168,9 +239,13 @@ class IntentAgent:
                 n_results=TOP_K,
             )
 
-            matched_task, confidence, rationale = self._resolve_task(results)
-
+            matched_task, confidence, chroma_rationale = self._resolve_task(results)
             metadata = INTENT_METADATA_MAP.get(matched_task, INTENT_METADATA_MAP["unknown"])
+
+            if fallback_reason:
+                rationale = f"[Fallback: ChromaDB] {chroma_rationale} (Reason: {fallback_reason})"
+            else:
+                rationale = chroma_rationale
 
             return IntentClassification(
                 task=matched_task,
@@ -221,7 +296,7 @@ class IntentAgent:
         if best_single_similarity < CONFIDENCE_THRESHOLD:
             rationale = (
                 f"Best match '{top_task}' had similarity {best_single_similarity:.2f}, "
-                f"below the {CONFIDENCE_THRESHOLD} threshold — falling back to 'unknown'."
+                f"below the {CONFIDENCE_THRESHOLD} threshold, falling back to 'unknown'."
             )
             return "unknown", best_single_similarity, rationale
 
