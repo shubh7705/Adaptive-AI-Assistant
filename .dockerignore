@@ -1,0 +1,60 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python artifacts and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local virtual environment (VERY IMPORTANT: Prevents gigabytes of host packages entering build context)
+.venv/
+env/
+venv/
+ENV/
+
+# Development and testing
+tests/
+backend/tests/
+scripts/
+algorithms/
+docs/
+logs/
+
+# Frontend (has its own separate Dockerfile context)
+frontend/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS and Editor metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

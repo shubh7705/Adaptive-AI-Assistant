@@ -111,7 +111,7 @@ class CapabilityFilter:
                 return False
             return True
 
-        # --- Level 1: Strict — all constraints satisfied ---
+        # --- Level 1: Strict: all constraints satisfied ---
         strict = []
         for m in active:
             if _check_strict(m):
@@ -187,7 +187,7 @@ class CapabilityFilter:
                     trace=trace
                 )
 
-        # --- Level 5: Ultimate fallback — all active models ---
+        # --- Level 5: Ultimate fallback: all active models ---
         return CandidateResult(
             models=base_pool,
             relaxation_level="fallback_all_active",

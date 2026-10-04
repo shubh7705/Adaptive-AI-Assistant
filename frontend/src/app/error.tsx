@@ -14,13 +14,13 @@ export default function Error({
   }, [error])
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="text-center glass-panel p-8 rounded-2xl">
-        <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-        <p className="text-white/60 text-sm mb-4">{error.message || 'An unexpected error occurred'}</p>
+    <div className="flex h-full w-full items-center justify-center min-h-[350px]">
+      <div className="text-center panel p-6 max-w-md">
+        <h2 className="text-base font-semibold text-zinc-100 mb-2">Something went wrong</h2>
+        <p className="text-zinc-400 text-xs mb-4">{error.message || 'An unexpected error occurred'}</p>
         <button
           onClick={() => reset()}
-          className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm transition-colors"
+          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
         >
           Try again
         </button>

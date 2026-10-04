@@ -209,7 +209,7 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def root():
         return {
-            "message": "Welcome to ModelRouter AI",
+            "message": "Welcome to Adaptive Chat AI",
             "docs": "/docs",
             "health": "/api/v1/health"
         }

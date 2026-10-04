@@ -22,7 +22,7 @@ def setup_logging():
     import os
     os.makedirs("logs", exist_ok=True)
     logger.add(
-        "logs/modelrouter.log",
+        "logs/adaptivechat.log",
         rotation="10 MB",
         retention="10 days",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",

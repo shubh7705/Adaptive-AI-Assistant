@@ -16,4 +16,4 @@ async def health_check():
     """
     Health check endpoint to verify the API is up and running.
     """
-    return {"status": "ok", "message": "ModelRouter API is healthy"}
+    return {"status": "ok", "message": "Adaptive Chat API is healthy"}

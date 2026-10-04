@@ -1,5 +1,5 @@
 """
-DynamicWeightGenerator — Change 10 (Phase 2)
+DynamicWeightGenerator: Change 10 (Phase 2)
 
 Weights are loaded from config/routing_weights.yaml so they can be tuned
 and hot-reloaded without a Docker rebuild. A short in-process TTL cache

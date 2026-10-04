@@ -1,5 +1,5 @@
 """
-CandidateRanker — Change 11 (Phase 2)
+CandidateRanker: Change 11 (Phase 2)
 
 Tie-break strategy upgraded from weighted random to epsilon-greedy contextual bandit:
   - With probability BANDIT_EPSILON: explore (uniform random among tied candidates)
@@ -47,7 +47,7 @@ class CandidateRanker:
         tied = [c for c in top_candidates if (highest_score - c[1]) <= margin]
 
         if len(tied) == 1:
-            # Clear winner — deterministic selection, no bandit needed
+            # Clear winner: deterministic selection, no bandit needed
             selected = tied[0]
             reason = "Clear winner with highest score."
         else:

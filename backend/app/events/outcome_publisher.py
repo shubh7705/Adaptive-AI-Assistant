@@ -1,5 +1,5 @@
 """
-Outcome Publisher — Change 8 (Phase 2)
+Outcome Publisher: Change 8 (Phase 2)
 
 Emits a routing outcome event to a Redis Stream after every model call completes.
 The streaming endpoint calls publish_outcome_event() instead of calling

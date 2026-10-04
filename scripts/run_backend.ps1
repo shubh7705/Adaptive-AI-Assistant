@@ -1,7 +1,7 @@
 # Script to run the backend FastAPI application locally
 # Automatically resolves the backend path
 
-Write-Host "Starting ModelRouter AI Backend..."
+Write-Host "Starting Adaptive Chat AI Backend..."
 
 # Determine the absolute path to the backend directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

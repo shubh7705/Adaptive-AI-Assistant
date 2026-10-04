@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, MessageSquare, Database, Settings, Activity } from 'lucide-react'
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -18,58 +17,48 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="flex h-screen w-64 flex-col glass-panel border-r border-white/5 border-l-0 border-y-0 text-white p-4">
-      <div className="flex items-center gap-3 px-2 py-4 mb-8">
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_0_15px_rgba(252,128,255,0.5)]">
-          <Activity className="h-5 w-5 text-white" />
+    <aside className="flex h-screen w-64 flex-col bg-[#111113] border-r border-zinc-800 text-zinc-200 p-4 select-none">
+      <div className="flex items-center gap-2.5 px-2 py-3 mb-6 border-b border-zinc-800/80">
+        <div className="h-7 w-7 rounded-md bg-blue-600 flex items-center justify-center text-white shrink-0">
+          <Activity className="h-4 w-4" />
         </div>
-        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-          ModelRouter AI
+        <span className="text-sm font-semibold text-zinc-100 tracking-tight">
+          Adaptive Chat AI
         </span>
       </div>
 
-      <nav className="flex-1 space-y-2" aria-label="Main navigation">
+      <nav className="flex-1 space-y-1" aria-label="Main navigation">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           return (
-            <Link key={item.name} href={item.href}>
-              <motion.div
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.98 }}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all relative overflow-hidden",
-                  isActive
-                    ? "text-white"
-                    : "text-white/60 hover:text-white hover:bg-white/5"
-                )}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="sidebar-active-pill"
-                    className="absolute inset-0 bg-primary/10 rounded-lg border border-primary/20"
-                    initial={false}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <item.icon className={cn("h-5 w-5 z-10 transition-colors", isActive ? "text-primary" : "")} />
-                <span className="z-10">{item.name}</span>
-              </motion.div>
+            <Link
+              key={item.name}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-zinc-800 text-white font-medium"
+                  : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/60"
+              )}
+            >
+              <item.icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-blue-400" : "text-zinc-400")} />
+              <span>{item.name}</span>
             </Link>
           )
         })}
       </nav>
 
-      <div className="mt-auto px-2 py-4 border-t border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center border border-white/10">
-            <span className="text-sm font-semibold">AD</span>
+      <div className="mt-auto px-2 py-3 border-t border-zinc-800">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-md bg-zinc-800 flex items-center justify-center border border-zinc-700/60 text-xs font-semibold text-zinc-300">
+            AD
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-white/90">Admin User</span>
-            <span className="text-xs text-white/50">admin@modelrouter.ai</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-medium text-zinc-200 truncate">Admin User</span>
+            <span className="text-[11px] text-zinc-500 truncate">admin@adaptivechat.ai</span>
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
